@@ -18,7 +18,7 @@ spec:
       paths:
         - "."
   container:
-    image: python:3.12-slim
+    image: python:3.14-slim
     workingDir: /data/repo
     resources:
       requests:

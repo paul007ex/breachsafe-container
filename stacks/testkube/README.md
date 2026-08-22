@@ -3,7 +3,7 @@
 
 # testkube — Kubernetes-native test orchestration
 
-OPT-IN test stack. Runs qureddy's pytest suite as a Testkube `Test` inside a local
+OPT-IN test stack. Runs qureddy's pytest suite as a Testkube `TestWorkflow` inside a local
 `kind` cluster, with the Testkube dashboard/API exposed via `kubectl port-forward`.
 NOT baked into any image, NOT run by CI.
 
@@ -24,7 +24,7 @@ helm install testkube kubeshop/testkube \
 
 # 3. Register the qureddy pytest Test and run it.
 kubectl apply -f qureddy-test.yaml
-kubectl testkube run test qureddy-pytest -f   # or: kubectl -n testkube create job ...
+kubectl testkube run testworkflow qureddy-pytest -f   # kind: TestWorkflow (see qureddy-test.yaml)
 
 # 4. Expose the dashboard + API.
 kubectl -n testkube port-forward svc/testkube-dashboard 8099:8080 &

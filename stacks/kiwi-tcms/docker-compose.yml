@@ -14,8 +14,10 @@
 #     /Kiwi/manage.py createsuperuser --noinput --username admin --email admin@local
 # Web UI (HTTPS, self-signed): https://localhost:8610  (login admin / admin-kiwi-1234)
 #
-# Pinned images (bump deliberately): kiwitcms/kiwi:13.7, mariadb:11.4. Upstream Kiwi TCMS
-# is GPL-2.0-or-later; mariadb is GPL-2.0. They keep their own licenses.
+# Pinned images (bump deliberately): kiwitcms/kiwi is digest-pinned (the community image
+# publishes only :latest upstream, so there is no 13.7 tag to pin to; pin by digest and bump
+# deliberately), mariadb:11.4. Upstream Kiwi TCMS is GPL-2.0-or-later; mariadb is GPL-2.0.
+# They keep their own licenses.
 
 name: breachsafe-kiwi
 
@@ -42,7 +44,8 @@ services:
 
   kiwi_web:
     container_name: kiwi_web
-    image: kiwitcms/kiwi:latest
+    # kiwitcms/kiwi:latest resolved 2026-08-22 via the Docker registry API.
+    image: kiwitcms/kiwi@sha256:2e350a30c1c9b93ec8f5e1322a8c6227c4acc59d0f53b966eee6804629240a3f
     restart: unless-stopped
     depends_on:
       kiwi_db:
