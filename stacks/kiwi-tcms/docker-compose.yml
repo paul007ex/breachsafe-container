@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Kiwi TCMS — open-source test-case management (test plans, cases, runs, executions).
+# OPT-IN posture/test stack you bring up with `docker compose up -d`, NOT baked into any
+# image and NOT run by CI. Landing zone for qureddy's JUnit results so they live in a
+# TestPlan + TestRun with per-case executions over time.
+#
+# Bring up:
+#   cd stacks/kiwi-tcms && docker compose up -d
+# First-run init (DB migrate + superuser), run once after the web container is healthy:
+#   docker exec kiwi_web /Kiwi/manage.py migrate --noinput
+#   docker exec -e DJANGO_SUPERUSER_PASSWORD=admin-kiwi-1234 kiwi_web \
+#     /Kiwi/manage.py createsuperuser --noinput --username admin --email admin@local
+# Web UI (HTTPS, self-signed): https://localhost:8610  (login admin / admin-kiwi-1234)
+#
+# Pinned images (bump deliberately): kiwitcms/kiwi:13.7, mariadb:11.4. Upstream Kiwi TCMS
+# is GPL-2.0-or-later; mariadb is GPL-2.0. They keep their own licenses.
+
+name: breachsafe-kiwi
+
+services:
+  kiwi_db:
+    container_name: kiwi_db
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_CHARACTER_SET_SERVER: utf8mb4
+      MARIADB_COLLATION_SERVER: utf8mb4_unicode_ci
+      MARIADB_DATABASE: kiwi
+      MARIADB_USER: kiwi
+      # Local-dev placeholders. Change before any non-local use.
+      MARIADB_PASSWORD: kiwi
+      MARIADB_ROOT_PASSWORD: kiwi_root
+    volumes:
+      - kiwi_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kiwi_web:
+    container_name: kiwi_web
+    image: kiwitcms/kiwi:latest
+    restart: unless-stopped
+    depends_on:
+      kiwi_db:
+        condition: service_healthy
+    ports:
+      # container 8443 (nginx TLS) -> host 8610 ; container 8080 (uwsgi http) -> host 8611
+      - "8610:8443"
+      - "8611:8080"
+    environment:
+      KIWI_DB_HOST: kiwi_db
+      KIWI_DB_PORT: "3306"
+      KIWI_DB_NAME: kiwi
+      KIWI_DB_USER: kiwi
+      KIWI_DB_PASSWORD: kiwi
+    volumes:
+      - kiwi_uploads:/Kiwi/uploads
+
+volumes:
+  kiwi_db_data:
+  kiwi_uploads:

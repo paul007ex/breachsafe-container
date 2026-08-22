@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# A Testkube TestWorkflow that runs qureddy's pytest suite from the public repo and
+# emits a JUnit report. Apply into the testkube namespace, then run it:
+#   kubectl apply -f qureddy-test.yaml
+#   kubectl testkube run testworkflow qureddy-pytest -f
+apiVersion: testworkflows.testkube.io/v1
+kind: TestWorkflow
+metadata:
+  name: qureddy-pytest
+  namespace: testkube
+spec:
+  content:
+    git:
+      uri: https://github.com/breachsafe/qureddy.git
+      revision: main
+      paths:
+        - "."
+  container:
+    image: python:3.12-slim
+    workingDir: /data/repo
+    resources:
+      requests:
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+  steps:
+    - name: install-deps
+      shell: pip install --no-cache-dir -e '.[dev]' || pip install --no-cache-dir -e . pytest
+    - name: run-pytest
+      shell: pytest --junit-xml=/data/junit.xml -q --no-cov --ignore=tests/live || true
+      artifacts:
+        paths:
+          - /data/junit.xml

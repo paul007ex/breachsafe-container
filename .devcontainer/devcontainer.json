@@ -1,0 +1,27 @@
+// SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+//
+// Local dev uses the SAME pinned image CI runs, so "works on my machine" == CI.
+{
+  "name": "breachsafe-container",
+  "image": "ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7",
+  "remoteUser": "breachsafe",
+  "containerEnv": {
+    "QUREDDY_OPENSSL": "/opt/openssl/bin/openssl",
+    "OPENSSL_DIR": "/opt/openssl",
+    "LD_LIBRARY_PATH": "/opt/openssl/lib64:/opt/openssl/lib"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.mypy-type-checker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3"
+      }
+    }
+  },
+  "postCreateCommand": "python3 --version && /opt/openssl/bin/openssl version && uv --version"
+}

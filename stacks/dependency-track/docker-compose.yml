@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Dependency-Track — SBOM -> vuln posture (the "component -> vuln matching +
+# VEX/analysis triage lifecycle" capability from CATALOG.md's posture-platform
+# lane). OPT-IN: this is a heavy, long-running server stack you bring up with
+# `docker compose up`, NOT baked into any image.
+#
+# Feed it SBOMs produced by the workbench:
+#   docker run --rm -v "$PWD:/src" breachsafe-workbench \
+#     syft dir:/src -o cyclonedx-json > bom.json
+#   # then upload bom.json to a project via the API / UI (http://localhost:8080).
+#
+# Pinned image versions (bump deliberately): apiserver + frontend 4.14.3,
+# postgres 16. Upstream images are Apache-2.0; they keep their own license.
+
+name: breachsafe-dtrack
+
+services:
+  dtrack-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dtrack
+      POSTGRES_USER: dtrack
+      # Change before any non-local use.
+      POSTGRES_PASSWORD: dtrack
+    volumes:
+      - dtrack-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtrack -d dtrack"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  dtrack-apiserver:
+    image: dependencytrack/apiserver:4.14.3
+    restart: unless-stopped
+    depends_on:
+      dtrack-postgres:
+        condition: service_healthy
+    environment:
+      ALPINE_DATABASE_MODE: external
+      ALPINE_DATABASE_URL: jdbc:postgresql://dtrack-postgres:5432/dtrack
+      ALPINE_DATABASE_DRIVER: org.postgresql.Driver
+      ALPINE_DATABASE_USERNAME: dtrack
+      ALPINE_DATABASE_PASSWORD: dtrack
+      # Heap: the API server is memory-hungry; 4G+ recommended (see stacks/README.md).
+      EXTRA_JAVA_OPTIONS: -Xmx4g
+    volumes:
+      - dtrack-apiserver:/data
+    ports:
+      - "8081:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+
+  dtrack-frontend:
+    image: dependencytrack/frontend:4.14.3
+    restart: unless-stopped
+    depends_on:
+      - dtrack-apiserver
+    environment:
+      # Where the browser reaches the API server.
+      API_BASE_URL: http://localhost:8081
+    ports:
+      - "8080:8080"
+
+volumes:
+  dtrack-postgres:
+  dtrack-apiserver:

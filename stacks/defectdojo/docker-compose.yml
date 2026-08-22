@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# ============================================================================
+# OPTIONAL — lower priority per lead. Bring this up only if you specifically
+# want DefectDojo's parser-package + import/reimport lifecycle. Dependency-Track
+# (SBOM->vuln) and GUAC (supply-chain graph) are the primary posture stacks;
+# DefectDojo is the aggregation/dedupe reference and is heavier than both.
+# ============================================================================
+#
+# DefectDojo — findings aggregation across the scan fleet (the "parser-package
+# model + import/reimport lifecycle + dedupe-as-data + Test_Import receipts"
+# capability from CATALOG.md's posture-platform lane). OPT-IN: heavy,
+# long-running server stack you bring up with `docker compose up`, NOT baked
+# into any image.
+#
+# Import workbench output via DefectDojo's per-tool parsers (semgrep, bandit,
+# trufflehog, grype, nuclei, ... each has a parser) at http://localhost:8080.
+#
+# This is a CONDENSED single-file version of the upstream compose (which splits
+# across docker-compose.yml + override files). Pinned versions (bump
+# deliberately): defectdojo 3.2.201, postgres 16, redis 7. Upstream DefectDojo
+# is BSD-3-Clause; it keeps its own license.
+
+name: breachsafe-defectdojo
+
+x-dd-image: &dd-image defectdojo/defectdojo-django:3.2.201
+
+x-dd-env: &dd-env
+  DD_DATABASE_URL: postgresql://defectdojo:defectdojo@dd-postgres:5432/defectdojo
+  DD_CELERY_BROKER_URL: redis://dd-redis:6379/0
+  DD_SECRET_KEY: change-me-before-any-non-local-use
+  DD_CREDENTIAL_AES_256_KEY: change-me-before-any-non-local-use
+  DD_ALLOWED_HOSTS: "*"
+
+services:
+  dd-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: defectdojo
+      POSTGRES_USER: defectdojo
+      # Change before any non-local use.
+      POSTGRES_PASSWORD: defectdojo
+    volumes:
+      - dd-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defectdojo -d defectdojo"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  dd-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - dd-redis:/data
+
+  # One-shot: run DB migrations + seed the admin user, then exit.
+  dd-initializer:
+    image: *dd-image
+    command: ["/entrypoint-initializer.sh"]
+    environment:
+      <<: *dd-env
+      DD_ADMIN_USER: admin
+      DD_ADMIN_PASSWORD: admin
+    depends_on:
+      dd-postgres:
+        condition: service_healthy
+      dd-redis:
+        condition: service_started
+
+  dd-uwsgi:
+    image: *dd-image
+    restart: unless-stopped
+    command: ["/entrypoint-uwsgi.sh"]
+    environment:
+      <<: *dd-env
+    depends_on:
+      dd-initializer:
+        condition: service_completed_successfully
+
+  dd-celeryworker:
+    image: *dd-image
+    restart: unless-stopped
+    command: ["/entrypoint-celery-worker.sh"]
+    environment:
+      <<: *dd-env
+    depends_on:
+      dd-initializer:
+        condition: service_completed_successfully
+
+  dd-celerybeat:
+    image: *dd-image
+    restart: unless-stopped
+    command: ["/entrypoint-celery-beat.sh"]
+    environment:
+      <<: *dd-env
+    depends_on:
+      dd-initializer:
+        condition: service_completed_successfully
+
+  dd-nginx:
+    image: defectdojo/defectdojo-nginx:3.2.201
+    restart: unless-stopped
+    environment:
+      DD_UWSGI_HOST: dd-uwsgi
+      DD_UWSGI_PORT: "3031"
+    depends_on:
+      - dd-uwsgi
+    ports:
+      - "8080:8080"
+
+volumes:
+  dd-postgres:
+  dd-redis:

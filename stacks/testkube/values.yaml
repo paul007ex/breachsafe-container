@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Minimal-footprint Testkube Helm values for a local kind cluster. Disables the
+# heavier optional subsystems (in-cluster MinIO logs storage kept, but no extra
+# executors) so the control plane fits alongside the other local stacks.
+#
+# helm install testkube kubeshop/testkube -n testkube --create-namespace -f values.yaml
+
+# Do not open a browser or start the CLI's own dashboard telemetry on install.
+testkube-api:
+  minio:
+    resources:
+      requests:
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
+mongodb:
+  resources:
+    requests:
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+nats:
+  nats:
+    resources:
+      requests:
+        memory: 64Mi
+      limits:
+        memory: 256Mi

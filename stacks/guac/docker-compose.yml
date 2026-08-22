@@ -1,0 +1,109 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# GUAC — supply-chain graph fusion + SLSA/in-toto attestation model (the
+# "pURL identity/merge + attestation" capability from CATALOG.md's posture lane).
+# OPT-IN: heavy, long-running server stack you bring up with `docker compose up`,
+# NOT baked into any image.
+#
+# GUAC ingests SBOMs / attestations and fuses them into a queryable graph.
+# Feed it artifacts produced by the workbench (syft SBOMs, cosign/in-toto
+# attestations), then query via the GraphQL endpoint (http://localhost:8080).
+#   docker run --rm -v "$PWD:/src" breachsafe-workbench \
+#     syft dir:/src -o spdx-json > sbom.spdx.json
+#   # then: guacone collect files sbom.spdx.json  (from the guac CLI image)
+#
+# One `ghcr.io/guacsec/guac` image runs each role via a different subcommand.
+# Backend: postgres (ent). Messaging + blob: NATS with embedded JetStream.
+#
+# Pinned versions (bump deliberately): guac v1.1.0, nats 2.10-alpine,
+# postgres 16-alpine. Upstream GUAC is Apache-2.0; it keeps its own license.
+
+name: breachsafe-guac
+
+x-guac-image: &guac-image ghcr.io/guacsec/guac:v1.1.0
+
+x-guac-env: &guac-env
+  GUAC_DB_ADDRESS: postgres://guac:guac@guac-postgres:5432/guac?sslmode=disable
+  GUAC_NATS_ADDR: nats://guac-nats:4222
+  GUAC_BLOB_ADDR: file:///tmp/blobstore?no_tmp_dir=true
+
+services:
+  guac-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guac
+      POSTGRES_USER: guac
+      # Change before any non-local use.
+      POSTGRES_PASSWORD: guac
+    volumes:
+      - guac-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guac -d guac"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  guac-nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - guac-nats:/data
+    ports:
+      - "4222:4222"
+
+  # GraphQL server: the query surface for the fused supply-chain graph.
+  guac-graphql:
+    image: *guac-image
+    restart: unless-stopped
+    command: ["/opt/guac/guacgql"]
+    environment:
+      <<: *guac-env
+    depends_on:
+      guac-postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  # Collector-subscriber: tracks what still needs to be collected.
+  guac-collectsub:
+    image: *guac-image
+    restart: unless-stopped
+    command: ["/opt/guac/guaccsub"]
+    environment:
+      <<: *guac-env
+    depends_on:
+      - guac-nats
+    ports:
+      - "2782:2782"
+
+  # Ingestor: pulls documents off NATS and writes nodes/edges into the graph.
+  guac-ingestor:
+    image: *guac-image
+    restart: unless-stopped
+    command: ["/opt/guac/guacingest"]
+    environment:
+      <<: *guac-env
+    depends_on:
+      guac-postgres:
+        condition: service_healthy
+      guac-nats:
+        condition: service_started
+
+  # REST API for programmatic collection/queries.
+  guac-rest:
+    image: *guac-image
+    restart: unless-stopped
+    command: ["/opt/guac/guacrest"]
+    environment:
+      <<: *guac-env
+    depends_on:
+      - guac-graphql
+    ports:
+      - "8081:8081"
+
+volumes:
+  guac-postgres:
+  guac-nats:

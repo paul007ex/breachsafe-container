@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# kind cluster for the Testkube stack. One control-plane node is enough for a local
+# Testkube install running qureddy's pytest suite as a Test.
+#
+#   kind create cluster --name bslab-testkube --config kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: bslab-testkube
+nodes:
+  - role: control-plane

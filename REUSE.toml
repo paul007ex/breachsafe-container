@@ -1,0 +1,22 @@
+version = 1
+
+# breachsafe-container: pinned BreachSAFE toolchain image (CI runtime + devcontainer).
+# First-party BreachSAFE infrastructure under the standing PolyForm-Noncommercial-1.0.0
+# default. "aggregate" precedence lets any file with its own inline SPDX header keep it;
+# this fills the rest.
+
+[[annotations]]
+path = [
+  "Dockerfile",
+  ".github/**",
+  ".devcontainer/**",
+  "README.md",
+  "LICENSE",
+  ".gitignore",
+  ".dockerignore",
+  "workbench/**",
+  "stacks/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 BreachSAFE <https://www.breachsafe.io>"
+SPDX-License-Identifier = "PolyForm-Noncommercial-1.0.0"
