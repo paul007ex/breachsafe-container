@@ -5,8 +5,12 @@
 
 The pinned BreachSAFE toolchain image: one reproducible environment for **CI runtime**
 and **local dev (devcontainer)**. CI stops rebuilding OpenSSL 3.5 from source on every
-run, and tool versions stop drifting per repo. Implements §4.2 of the
-`breachsafe-repo` design.
+run, and tool versions stop drifting per repo. Implements §4.2 of the scaffold design
+spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
+[`breachsafe-common`](https://github.com/paul007ex/breachsafe-common).
+
+> The standalone `breachsafe-repo` repository this originally referenced was archived on
+> 2026-08-22; its copier template now lives at `breachsafe-common/scaffold/`.
 
 > License: **PolyForm-Noncommercial-1.0.0** (source-available, non-commercial). This is
 > BreachSAFE first-party infrastructure, not OSI open source.
