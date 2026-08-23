@@ -187,10 +187,25 @@ RUN python3 -m pip install --no-cache-dir \
 # Node + jscpd: the duplicate-code gate in breachsafe-common's reusable
 # quality-gates-python.yml runs jscpd inside this image. bookworm ships Node 18
 # (jscpd 4 needs >=14). jscpd is installed globally so CI needs no npx fetch.
-ARG JSCPD_VERSION=4
+# Pin the exact patch, not the floating major. `jscpd@4` resolved to a different build
+# every time this image was rebuilt, with no digest recorded anywhere (#2).
+ARG JSCPD_VERSION=4.3.0
+# NODE_EXTRA_CA_CERTS is the fix for #2. Node validates TLS against its own compiled-in root
+# list and ignores /etc/ssl/certs, which is why `npm install` failed here with
+# UNABLE_TO_GET_ISSUER_CERT_LOCALLY under BuildKit (locally AND on GitHub runners, 4/4 attempts)
+# while `pip install` in the layer above and every `curl` in this file succeeded on the same
+# network. Pointing Node at Debian's store makes it agree with the rest of the image. Retries
+# cover the transient half; npm's default is 2 with a short ceiling.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nodejs npm \
-    && npm install -g "jscpd@${JSCPD_VERSION}" \
+    && apt-get install -y --no-install-recommends ca-certificates nodejs npm \
+    && update-ca-certificates \
+    && NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
+       npm install -g \
+         --fetch-retries=5 \
+         --fetch-retry-mintimeout=10000 \
+         --fetch-retry-maxtimeout=120000 \
+         "jscpd@${JSCPD_VERSION}" \
+    && jscpd --version \
     && npm cache clean --force \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
