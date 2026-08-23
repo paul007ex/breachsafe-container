@@ -204,7 +204,21 @@ RUN python3 -m pip install --no-cache-dir \
       "uv==${UV_VERSION}" \
       "ruff==${RUFF_VERSION}" \
       "mypy==${MYPY_VERSION}" \
-      "reuse[charset-normalizer]==${REUSE_VERSION}"
+      "reuse[charset-normalizer]==${REUSE_VERSION}" \
+    # Remove the installer once the toolchain is in. Nothing downstream needs bare pip:
+    # breachsafe-common's reusable workflows drive everything through `uv run/sync/tool run`
+    # (verified: zero bare-pip invocations across .github/workflows/ and quality-gates/).
+    # pip's vendored tree is where Trivy finds msgpack GHSA-6v7p-g79w-8964 and setuptools
+    # CVE-2025-47273, both inherited from python:3.14-slim-bookworm rather than declared here.
+    # Deleting unused code beats suppressing a finding about it. (#3)
+    && python3 -m pip uninstall -y pip setuptools \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
+              /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+              /usr/local/lib/python3.14/site-packages/setuptools \
+              /usr/local/lib/python3.14/site-packages/setuptools-*.dist-info \
+              /usr/local/lib/python3.14/site-packages/pkg_resources \
+              /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
+    && uv --version && ruff --version && mypy --version && reuse --version
 
 # Node + jscpd: the duplicate-code gate in breachsafe-common's reusable
 # quality-gates-python.yml runs jscpd inside this image. bookworm ships Node 18
