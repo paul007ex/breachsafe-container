@@ -235,6 +235,22 @@ RUN set -eux; \
     jscpd --version; \
     npm cache clean --force
 
+# git: required, not optional. Two independent reasons, both verified in CI:
+#   1. The diff-scoped gates shell out to it. quality-gates-python.yml computes
+#      BASE_SHA/HEAD_SHA with `git rev-parse` and feeds them to
+#      check_antipattern_diff.py. Without git every such step exits 127.
+#   2. actions/checkout SILENTLY falls back to a REST tarball when git is absent.
+#      The files land but there is no .git directory, so any diff-based gate is
+#      impossible and gitleaks has no history to scan. The failure is quiet: the
+#      checkout step goes green.
+# This image is also documented as the local devcontainer, which needs git regardless.
+# Asserted below so a silent install failure cannot ship a git-less image. (#2 pattern)
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends git; \
+    rm -rf /var/lib/apt/lists/*; \
+    git --version
+
 # Non-root user.
 RUN groupadd --gid 1000 breachsafe \
     && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash breachsafe
