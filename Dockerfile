@@ -199,12 +199,17 @@ ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
     PYTHONDONTWRITEBYTECODE=1 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
-# Pinned python toolchain (uv, ruff, mypy, reuse) installed system-wide.
+ARG DEFUSEDXML_VERSION=0.7.1
+# Pinned python toolchain (uv, ruff, mypy, reuse, defusedxml) installed system-wide.
 RUN python3 -m pip install --no-cache-dir \
       "uv==${UV_VERSION}" \
       "ruff==${RUFF_VERSION}" \
       "mypy==${MYPY_VERSION}" \
       "reuse[charset-normalizer]==${REUSE_VERSION}" \
+      # check_no_skipped_tests.py parses JUnit XML and imports defusedxml rather
+      # than stdlib ElementTree, because the XML it reads is a build artifact.
+      # Without it the no-skipped-tests gate dies with ModuleNotFoundError.
+      "defusedxml==${DEFUSEDXML_VERSION}" \
     # Remove the installer once the toolchain is in. Nothing downstream needs bare pip:
     # breachsafe-common's reusable workflows drive everything through `uv run/sync/tool run`
     # (verified: zero bare-pip invocations across .github/workflows/ and quality-gates/).
@@ -218,7 +223,8 @@ RUN python3 -m pip install --no-cache-dir \
               /usr/local/lib/python3.14/site-packages/setuptools-*.dist-info \
               /usr/local/lib/python3.14/site-packages/pkg_resources \
               /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
-    && uv --version && ruff --version && mypy --version && reuse --version
+    && uv --version && ruff --version && mypy --version && reuse --version \
+    && python3 -c 'import defusedxml; print("defusedxml", defusedxml.__version__)'
 
 # Node + jscpd: the duplicate-code gate in breachsafe-common's reusable
 # quality-gates-python.yml runs jscpd inside this image. bookworm ships Node 18
