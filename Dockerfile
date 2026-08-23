@@ -19,6 +19,23 @@ FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bb
 ARG OPENSSL_VERSION=3.5.7
 ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
 
+# Enforce the supported range instead of documenting it. The image is tagged with
+# the LTS SERIES (3.14-openssl3.5), so any patch inside >=3.5.7,<3.6 may ship under
+# that tag, and nothing outside it may. 3.5.7 is the floor; 3.6 and 4.0 are out of
+# scope for this LTS line. A build that drifts out of range fails here rather than
+# publishing an image whose tag lies about its contents.
+RUN set -eu; \
+    case "${OPENSSL_VERSION}" in \
+      3.5.*) ;; \
+      *) echo "OPENSSL_VERSION=${OPENSSL_VERSION} is outside the 3.5 LTS series" >&2; exit 1 ;; \
+    esac; \
+    patch="${OPENSSL_VERSION#3.5.}"; \
+    case "$patch" in \
+      ''|*[!0-9]*) echo "OPENSSL_VERSION=${OPENSSL_VERSION} has no numeric patch" >&2; exit 1 ;; \
+    esac; \
+    [ "$patch" -ge 7 ] || { echo "OPENSSL_VERSION=${OPENSSL_VERSION} is below the 3.5.7 floor" >&2; exit 1; }; \
+    echo "OpenSSL ${OPENSSL_VERSION} is within >=3.5.7,<3.6"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl perl \
     && rm -rf /var/lib/apt/lists/*

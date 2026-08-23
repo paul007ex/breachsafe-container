@@ -20,8 +20,15 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/paul007ex/breachsafe-container
-  # Tag scheme: <python>-openssl<openssl>. Keep in sync with the Dockerfile pins.
-  PRIMARY_TAG: 3.14-openssl3.5.7
+  # Tag scheme: <python>-opensslMAJOR.MINOR, the LTS SERIES, deliberately not the
+  # patch. Consumers pin the series so a 3.5.7 -> 3.5.8 bump does not force an edit
+  # in every repo's .github/bqp.env. The Dockerfile still pins an exact patch plus
+  # sha256, because it builds OpenSSL from source and a checksum is meaningless
+  # without an exact version. Floor is 3.5.7; the series moves within >=3.5.7,<3.6.
+  PRIMARY_TAG: 3.14-openssl3.5
+  # Kept so existing consumers pinning the patch tag do not break. Remove once
+  # every consumer has moved to the series tag.
+  LEGACY_PATCH_TAG: 3.14-openssl3.5.7
 
 permissions:
   contents: read
@@ -132,7 +139,7 @@ jobs:
         run: |
           refs=""
           for f in digests/*; do refs="$refs ${IMAGE}@$(cat "$f")"; done
-          for tag in "${PRIMARY_TAG}" latest; do
+          for tag in "${PRIMARY_TAG}" "${LEGACY_PATCH_TAG}" latest; do
             docker buildx imagetools create --tag "${IMAGE}:${tag}" $refs
           done
           docker buildx imagetools inspect "${IMAGE}:${PRIMARY_TAG}"
