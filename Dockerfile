@@ -62,9 +62,12 @@ ARG COSIGN_SHA256_amd64=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df
 ARG COSIGN_SHA256_arm64=c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a
 ARG JUST_SHA256_amd64=4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d
 ARG JUST_SHA256_arm64=748237128c4c40cbdabc65e841d05ceba13cc23a91eaba395495894c1d9764df
+ARG NODE_VERSION=22.23.2
+ARG NODE_SHA256_amd64=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
+ARG NODE_SHA256_arm64=fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl tar \
+    && apt-get install -y --no-install-recommends ca-certificates curl tar xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
@@ -138,6 +141,25 @@ RUN set -eux; \
     install -m 0755 just /out/bin/just; \
     rm -f just.tgz just
 
+# Node: needed by jscpd. Debian bookworm ships Node 18, which cannot load jscpd 4.x at all —
+# its CJS entry require()s an ES-only dependency and dies with ERR_REQUIRE_ESM. Verified on
+# arm64: node18+jscpd4.3.0 FAILS, node22+jscpd4.3.0 WORKS, node18+jscpd3.5.10 WORKS. Taking
+# Node 22 rather than downgrading jscpd, because breachsafe-common's .jscpd.json targets 4.x.
+# Checksum-pinned tarball like every other tool here, not apt. (#2)
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) nd_arch=linux-x64;   nd_sha="${NODE_SHA256_amd64}" ;; \
+      arm64) nd_arch=linux-arm64; nd_sha="${NODE_SHA256_arm64}" ;; \
+      *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    url="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${nd_arch}.tar.xz"; \
+    curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 "$url" -o node.tar.xz; \
+    echo "${nd_sha}  node.tar.xz" | sha256sum --check --strict; \
+    mkdir -p /out/node; \
+    tar --extract --xz --file node.tar.xz --directory /out/node --strip-components=1; \
+    rm -f node.tar.xz; \
+    rm -rf /out/node/CHANGELOG.md /out/node/LICENSE /out/node/README.md
+
 # ---------------------------------------------------------------------------
 # Stage (c): final image. Python 3.14 slim + OpenSSL + pinned python + tools.
 # ---------------------------------------------------------------------------
@@ -187,28 +209,17 @@ RUN python3 -m pip install --no-cache-dir \
 # Node + jscpd: the duplicate-code gate in breachsafe-common's reusable
 # quality-gates-python.yml runs jscpd inside this image. bookworm ships Node 18
 # (jscpd 4 needs >=14). jscpd is installed globally so CI needs no npx fetch.
-# Pin the exact patch, not the floating major. `jscpd@4` resolved to a different build
-# every time this image was rebuilt, with no digest recorded anywhere (#2).
+# Node 22 + jscpd. Node comes from the tool-fetch stage (the final image has no curl/xz);
+# jscpd is installed here because npm needs to resolve its dependency tree at build time.
+# `jscpd --version` is asserted so a silent install failure cannot ship an image whose
+# duplicate-code gate crashes on first use — which is exactly what ERR_REQUIRE_ESM did. (#2)
 ARG JSCPD_VERSION=4.3.0
-# NODE_EXTRA_CA_CERTS is the fix for #2. Node validates TLS against its own compiled-in root
-# list and ignores /etc/ssl/certs, which is why `npm install` failed here with
-# UNABLE_TO_GET_ISSUER_CERT_LOCALLY under BuildKit (locally AND on GitHub runners, 4/4 attempts)
-# while `pip install` in the layer above and every `curl` in this file succeeded on the same
-# network. Pointing Node at Debian's store makes it agree with the rest of the image. Retries
-# cover the transient half; npm's default is 2 with a short ceiling.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates nodejs npm \
-    && update-ca-certificates \
-    && NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
-       npm install -g \
-         --fetch-retries=5 \
-         --fetch-retry-mintimeout=10000 \
-         --fetch-retry-maxtimeout=120000 \
-         "jscpd@${JSCPD_VERSION}" \
-    && jscpd --version \
-    && npm cache clean --force \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=tool-fetch /out/node/ /usr/local/
+RUN set -eux; \
+    node --version; \
+    npm install -g --fetch-retries=5 "jscpd@${JSCPD_VERSION}"; \
+    jscpd --version; \
+    npm cache clean --force
 
 # Non-root user.
 RUN groupadd --gid 1000 breachsafe \
