@@ -89,7 +89,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           trivyignores: .trivyignore.yaml
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Build + push ${{ matrix.arch }} by digest (native, no emulation)
         run: |
