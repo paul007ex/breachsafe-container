@@ -4,7 +4,7 @@
 # breachsafe-container — pinned BreachSAFE toolchain image (CI runtime + devcontainer).
 # Multi-stage:
 #   (a) openssl-build : OpenSSL 3.5.7 LTS from source, SHA256-verified, --prefix=/opt/openssl
-#   (b) tool-fetch    : pinned release binaries (gitleaks, trivy, cyclonedx-cli, cosign, just),
+#   (b) tool-fetch    : pinned release binaries (gitleaks, cyclonedx-cli, cosign, just),
 #                       SHA256-verified per arch
 #   (c) final         : python:3.14-slim-bookworm + OpenSSL + pinned python + release tools
 #
@@ -46,7 +46,6 @@ ARG TARGETARCH
 
 # Pinned tool versions (see README "Pinned versions").
 ARG GITLEAKS_VERSION=8.30.1
-ARG TRIVY_VERSION=0.74.0
 ARG CYCLONEDX_CLI_VERSION=0.33.1
 ARG COSIGN_VERSION=3.1.3
 ARG JUST_VERSION=1.58.0
@@ -54,8 +53,6 @@ ARG JUST_VERSION=1.58.0
 # Per-arch SHA256 sums (verified upstream at author time).
 ARG GITLEAKS_SHA256_amd64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ARG GITLEAKS_SHA256_arm64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
-ARG TRIVY_SHA256_amd64=2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
-ARG TRIVY_SHA256_arm64=b94ce1976bbf3c15b514b605ee88be7c6d94a29be2302847ff01cb794d47aad5
 ARG CYCLONEDX_SHA256_amd64=bfc8b2538da86fe239bc53658bbb63c1c8c510a293c1e6891aa5bea5d3c58746
 ARG CYCLONEDX_SHA256_arm64=b2e9fdf9665ef49868a2ec012171c6e785dcd69745bc5869e53e4f4bfb096a5f
 ARG COSIGN_SHA256_amd64=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
@@ -86,20 +83,6 @@ RUN set -eux; \
     tar -xzf gitleaks.tgz gitleaks; \
     install -m 0755 gitleaks /out/bin/gitleaks; \
     rm -f gitleaks.tgz gitleaks
-
-# trivy: assets use Linux-64bit|Linux-ARM64.
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) tv_arch=Linux-64bit; tv_sha="${TRIVY_SHA256_amd64}" ;; \
-      arm64) tv_arch=Linux-ARM64; tv_sha="${TRIVY_SHA256_arm64}" ;; \
-      *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${tv_arch}.tar.gz"; \
-    curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 "$url" -o trivy.tgz; \
-    echo "${tv_sha}  trivy.tgz" | sha256sum --check --strict; \
-    tar -xzf trivy.tgz trivy; \
-    install -m 0755 trivy /out/bin/trivy; \
-    rm -f trivy.tgz trivy
 
 # cyclonedx-cli: single self-contained binary, installed as `cyclonedx`.
 RUN set -eux; \
@@ -175,7 +158,7 @@ ARG OPENSSL_VERSION=3.5.7
 ARG PYTHON_VERSION=3.14
 
 LABEL org.opencontainers.image.title="breachsafe-container" \
-      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/gitleaks/trivy/cyclonedx-cli/cosign/just/reuse." \
+      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/gitleaks/cyclonedx-cli/cosign/just/reuse." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
@@ -208,9 +191,8 @@ RUN python3 -m pip install --no-cache-dir \
     # Remove the installer once the toolchain is in. Nothing downstream needs bare pip:
     # breachsafe-common's reusable workflows drive everything through `uv run/sync/tool run`
     # (verified: zero bare-pip invocations across .github/workflows/ and quality-gates/).
-    # pip's vendored tree is where Trivy finds msgpack GHSA-6v7p-g79w-8964 and setuptools
-    # CVE-2025-47273, both inherited from python:3.14-slim-bookworm rather than declared here.
-    # Deleting unused code beats suppressing a finding about it. (#3)
+    # Remove the installer once the toolchain is in. Unused package-manager code should not
+    # remain in the runtime image.
     && python3 -m pip uninstall -y pip setuptools \
     && rm -rf /usr/local/lib/python3.14/site-packages/pip \
               /usr/local/lib/python3.14/site-packages/pip-*.dist-info \

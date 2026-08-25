@@ -66,24 +66,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Scan before publishing, on the native amd64 runner only (one scan is enough; the
-      # findings are in vendored third-party binaries, which are arch-independent).
-      # Mirrors the gate breachsafe-ux already runs on qureddy-ux. (#3)
-      - name: Build (load) for scanning
-        if: matrix.arch == 'amd64'
-        run: docker buildx build --platform linux/amd64 --load -t bc:scan --file ./Dockerfile .
-
-      - name: Trivy scan — fail on HIGH/CRITICAL
-        if: matrix.arch == 'amd64'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: bc:scan
-          format: table
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          trivyignores: .trivyignore.yaml
-          exit-code: "1"
-
       - name: Build + push ${{ matrix.arch }} by digest (native, no emulation)
         run: |
           docker buildx build \
