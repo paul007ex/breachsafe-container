@@ -9,7 +9,7 @@
 #
 # Layering: this image is FROM the pinned base toolchain image. It inherits
 # Python 3.14, OpenSSL 3.5.7 LTS (/opt/openssl), uv/ruff/mypy/reuse, and the
-# base release binaries (gitleaks, trivy, cyclonedx, cosign, just). It ADDS the
+# base release binaries (gitleaks, cyclonedx, cosign, just). It ADDS the
 # scan fleet below. Tool choices are grounded in
 # breachsafe-common/reference/CATALOG.md (AppSec/SCA/DAST fleet + crypto/TLS +
 # recon lanes).
@@ -40,7 +40,6 @@
 #   NOT included by design:
 #     masscan — needs raw-socket (CAP_NET_RAW) privileges; excluded to keep the
 #               image usable unprivileged/non-root. Use nmap for host/port work.
-#     trivy   — already present in the base image (do not duplicate).
 #     gitleaks — already present in the base image (secrets); trufflehog +
 #               detect-secrets added here complement it.
 # ===========================================================================
