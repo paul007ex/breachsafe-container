@@ -26,7 +26,6 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 | mypy | 2.3.1 | pip (PyPI) | version-pinned |
 | reuse | 6.2.0 (`[charset-normalizer]`) | pip (PyPI) | version-pinned |
 | gitleaks | 8.30.1 | release tarball | per-arch SHA256-checked |
-| trivy | 0.74.0 | release tarball | per-arch SHA256-checked |
 | cyclonedx-cli | 0.33.1 (binary: `cyclonedx`) | release binary | per-arch SHA256-checked |
 | cosign | 3.1.3 | release binary | per-arch SHA256-checked |
 | just | 1.58.0 | release tarball (musl) | per-arch SHA256-checked |
@@ -67,7 +66,7 @@ Multi-arch: `linux/amd64` + `linux/arm64`. Consumers should **digest-pin** in CI
 
 ### CI (`container:`)
 
-Run every job inside the toolchain so OpenSSL/uv/gitleaks/trivy are already present:
+Run every job inside the toolchain so OpenSSL/uv/gitleaks are already present:
 
 ```yaml
 jobs:

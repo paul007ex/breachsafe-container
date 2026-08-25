@@ -24,10 +24,10 @@ inherits, and does **not** re-install:
 - Python **3.14** and **OpenSSL 3.5.7 LTS** built from source at `/opt/openssl`
   (exposed via `OPENSSL_DIR` / `QUREDDY_OPENSSL` / `LD_LIBRARY_PATH`).
 - `uv`, `ruff`, `mypy`, `reuse` (PyPI, pinned).
-- `gitleaks`, `trivy`, `cyclonedx`, `cosign`, `just` (release binaries, pinned).
+- `gitleaks`, `cyclonedx`, `cosign`, `just` (release binaries, pinned).
 
 On top of that it adds the scan fleet below and drops back to the non-root
-`breachsafe` user (uid/gid 1000). `trivy` and `gitleaks` are **not** duplicated;
+`breachsafe` user (uid/gid 1000). `gitleaks` is **not** duplicated;
 they already live in the base.
 
 ## What's in it (the scan fleet)
@@ -69,7 +69,7 @@ Notes:
 
 - **masscan** — needs raw-socket (`CAP_NET_RAW`) privileges; excluded so the
   image stays usable unprivileged / non-root. Use `nmap` for host/port work.
-- **trivy**, **gitleaks** — already in the base image; not duplicated here.
+- **gitleaks** — already in the base image; not duplicated here.
 
 ## How to run
 

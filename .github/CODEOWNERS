@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 BreachSAFE contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Default ownership for the reusable build toolchain.
+* @paul007ex
+
+# High-impact release surfaces remain explicitly owned.
+/Dockerfile @paul007ex
+/.github/ @paul007ex
+/.github/workflows/ @paul007ex
