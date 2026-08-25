@@ -208,8 +208,9 @@ COPY --from=fleet-fetch /out/bin/ /usr/local/bin/
 COPY --from=fleet-fetch /out/opt/testssl.sh /opt/testssl.sh
 RUN ln -s /opt/testssl.sh/testssl.sh /usr/local/bin/testssl.sh
 
-# pip-installed fleet, version-pinned, system-wide.
-RUN python3 -m pip install --no-cache-dir \
+# Python fleet, version-pinned, installed system-wide through the base image's
+# pinned uv. The base image intentionally removes pip from the runtime image.
+RUN uv pip install --system --no-cache \
       "semgrep==${SEMGREP_VERSION}" \
       "bandit==${BANDIT_VERSION}" \
       "detect-secrets==${DETECT_SECRETS_VERSION}" \
