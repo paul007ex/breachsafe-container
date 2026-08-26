@@ -7,6 +7,12 @@
 #   (b) tool-fetch    : pinned release binaries (gitleaks, cyclonedx-cli, cosign, just),
 #                       SHA256-verified per arch
 #   (c) final         : python:3.14-slim-bookworm + OpenSSL + pinned python + release tools
+#   (d) rust          : rust:slim-bookworm + the SAME OpenSSL from (a)
+#
+# Two published targets, one OpenSSL. Stage (d) is a build target, not a layer of (c):
+# the Rust toolchain is ~700 MB and no Python consumer calls cargo, so it is not carried
+# into the default image. Both COPY --from=openssl-build, so the 3.5 pin is one ARG in
+# one stage and cannot drift between them (#3).
 #
 # Python 3.14 ONLY (no 3.12 fallback), NOT free-threaded.
 
@@ -161,9 +167,95 @@ RUN set -eux; \
     rm -rf /out/node/CHANGELOG.md /out/node/LICENSE /out/node/README.md
 
 # ---------------------------------------------------------------------------
+# Stage (d): Rust toolchain + the SAME OpenSSL 3.5.7 LTS from stage (a).
+#
+# Built as a separate target, published as its own tag. Serves QuCrypt, QuCert,
+# and QuCustody, which today each rebuild OpenSSL from source in their own CI
+# (breachsafe-standards CLAUDE.md §5 step 5: a bespoke build that rebuilds OpenSSL
+# breaks the toolchain guarantee).
+#
+# The base is bookworm, matching stage (a). That is load-bearing, not incidental:
+# an Alpine/musl base would produce a libcrypto that a glibc cargo build cannot
+# link, which is exactly why breachsafe-golden-go cannot serve QuVault's cgo build.
+#
+# rust:slim already ships cargo, clippy, rustfmt and cc. Only pkg-config is
+# missing, and openssl-sys needs it to locate libcrypto via PKG_CONFIG_PATH.
+# ---------------------------------------------------------------------------
+FROM rust:1.98.0-slim-bookworm@sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157 AS rust
+
+ARG OPENSSL_VERSION=3.5.7
+ARG RUST_VERSION=1.98.0
+
+LABEL org.opencontainers.image.title="breachsafe-container-rust" \
+      org.opencontainers.image.description="Pinned BreachSAFE Rust toolchain image (CI runtime + devcontainer): Rust 1.98.0, OpenSSL 3.5.7 LTS from source, cargo/clippy/rustfmt, gitleaks/cosign/just." \
+      org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
+      org.opencontainers.image.vendor="BreachSAFE" \
+      org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
+      org.opencontainers.image.base.name="docker.io/library/rust:1.98.0-slim-bookworm"
+
+# OpenSSL 3.5.7 LTS from stage (a). Same bytes as the Python image.
+COPY --from=openssl-build /opt/openssl /opt/openssl
+
+# Pinned release binaries from stage (b). The Rust repos' release gates call cosign
+# and gitleaks the same way the Python ones do.
+COPY --from=tool-fetch /out/bin/ /usr/local/bin/
+
+ENV OPENSSL_DIR=/opt/openssl \
+    OPENSSL_ROOT_DIR=/opt/openssl \
+    QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
+    LD_LIBRARY_PATH=/opt/openssl/lib64:/opt/openssl/lib \
+    PKG_CONFIG_PATH=/opt/openssl/lib64/pkgconfig:/opt/openssl/lib/pkgconfig \
+    PATH=/opt/openssl/bin:/usr/local/bin:$PATH \
+    CARGO_TERM_COLOR=always
+
+# pkg-config: openssl-sys resolves libcrypto through it, and rust:slim omits it.
+# git: same two reasons as the Python stage. actions/checkout falls back to a REST
+# tarball when git is absent, silently, leaving no .git for diff-scoped gates.
+# Every install is asserted, so a silent failure cannot ship a broken image (#2 pattern).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends pkg-config git; \
+    rm -rf /var/lib/apt/lists/*; \
+    pkg-config --version; \
+    git --version
+
+# clippy and rustfmt are rustup SHIMS in rust:slim, not installed components:
+# `command -v cargo-clippy` resolves, and `cargo clippy --version` then answers
+# "run `rustup component add clippy` to install it". Both repos' CI runs
+# `cargo fmt --check` and `cargo clippy -D warnings`, so without this the image
+# fails them at the first step. Caught by the assertion below on the first build.
+RUN rustup component add clippy rustfmt
+
+# Fail closed at BUILD time. An image that links the wrong OpenSSL is the failure this
+# whole stage exists to prevent, and it is invisible until a consumer's CI goes green
+# against 3.0.x. Asserting here means a bad image is never published.
+RUN set -eux; \
+    openssl_ver="$(/opt/openssl/bin/openssl version | awk '{print $2}')"; \
+    test "$openssl_ver" = "${OPENSSL_VERSION}" \
+      || { echo "OpenSSL ${openssl_ver}, expected ${OPENSSL_VERSION}" >&2; exit 1; }; \
+    pkgcfg_ver="$(pkg-config --modversion libcrypto)"; \
+    test "$pkgcfg_ver" = "${OPENSSL_VERSION}" \
+      || { echo "pkg-config libcrypto ${pkgcfg_ver}, expected ${OPENSSL_VERSION}" >&2; exit 1; }; \
+    rust_ver="$(rustc --version | awk '{print $2}')"; \
+    test "$rust_ver" = "${RUST_VERSION}" \
+      || { echo "rustc ${rust_ver}, expected ${RUST_VERSION}" >&2; exit 1; }; \
+    cargo --version; cargo clippy --version; rustfmt --version; \
+    /opt/openssl/bin/openssl list -signature-algorithms | grep -q 'ML-DSA-65' \
+      || { echo "ML-DSA-65 absent: this OpenSSL cannot serve QuCert or QuCrypt" >&2; exit 1; }; \
+    /opt/openssl/bin/openssl list -kem-algorithms | grep -q 'ML-KEM-768' \
+      || { echo "ML-KEM-768 absent: this OpenSSL cannot serve QuCrypt" >&2; exit 1; }
+
+RUN groupadd --gid 1000 breachsafe \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash breachsafe
+
+USER breachsafe
+WORKDIR /home/breachsafe
+CMD ["cargo"]
+
+# ---------------------------------------------------------------------------
 # Stage (c): final image. Python 3.14 slim + OpenSSL + pinned python + tools.
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52
+FROM python:3.14-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS python
 
 # Pinned python-tool versions (PyPI).
 ARG UV_VERSION=0.12.5
@@ -264,3 +356,4 @@ RUN groupadd --gid 1000 breachsafe \
 USER breachsafe
 WORKDIR /home/breachsafe
 CMD ["python3"]
+
