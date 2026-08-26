@@ -29,6 +29,10 @@ env:
   # Kept so existing consumers pinning the patch tag do not break. Remove once
   # every consumer has moved to the series tag.
   LEGACY_PATCH_TAG: 3.14-openssl3.5.7
+  # Rust target, same OpenSSL, same tag scheme. Serves QuCrypt, QuCert and QuCustody,
+  # which today each rebuild OpenSSL from source in their own CI.
+  RUST_PRIMARY_TAG: rust1.98-openssl3.5
+  RUST_PATCH_TAG: rust1.98.0-openssl3.5.7
 
 permissions:
   contents: read
@@ -43,10 +47,15 @@ jobs:
   # finishes in 3 min. This ports that pattern over. ubuntu-24.04-arm is free for public
   # repos, which this became on 2026-08-22.
   build:
-    name: Build ${{ matrix.arch }} (native)
+    name: Build ${{ matrix.target }}/${{ matrix.arch }} (native)
     strategy:
       fail-fast: false
       matrix:
+        # arch x target. `python` is the historical image and stays the Dockerfile's
+        # LAST stage, so a bare `docker build .` is unchanged. `rust` carries the same
+        # OpenSSL from the same stage (a), which is the point: one pin, two images.
+        arch: [amd64, arm64]
+        target: [python, rust]
         include:
           - arch: amd64
             runner: ubuntu-latest
@@ -73,23 +82,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build + push ${{ matrix.arch }} by digest (native, no emulation)
+      - name: Build + push ${{ matrix.target }}/${{ matrix.arch }} by digest (native, no emulation)
         run: |
           docker buildx build \
             --platform "linux/${{ matrix.arch }}" \
+            --target "${{ matrix.target }}" \
             --provenance=true --sbom=true \
             --metadata-file "$RUNNER_TEMP/meta.json" \
             --output "type=image,name=${IMAGE},push-by-digest=true,name-canonical=true,push=true" \
             --file ./Dockerfile \
             .
           digest="$(python3 -c "import json;print(json.load(open('$RUNNER_TEMP/meta.json'))['containerimage.digest'])")"
-          mkdir -p "$RUNNER_TEMP/digests"
-          echo "$digest" > "$RUNNER_TEMP/digests/${{ matrix.arch }}"
+          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.target }}"
+          echo "$digest" > "$RUNNER_TEMP/digests/${{ matrix.target }}/${{ matrix.arch }}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digest-${{ matrix.arch }}
-          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+          name: digest-${{ matrix.target }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.target }}/${{ matrix.arch }}
 
   # Join the per-arch digests into one manifest list and apply the human tags.
   manifest:
@@ -101,10 +111,20 @@ jobs:
       contents: read
       id-token: write   # keyless cosign signing (OIDC)
     steps:
+      # Downloaded per target, into separate directories. `merge-multiple: true` across
+      # both targets would collide: digest-python-amd64 and digest-rust-amd64 each
+      # contain a file named `amd64`, so one would silently overwrite the other and the
+      # rust tag would point at the python image.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: digests
-          pattern: digest-*
+          path: digests/python
+          pattern: digest-python-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: digests/rust
+          pattern: digest-rust-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -119,19 +139,47 @@ jobs:
 
       - name: Create + push multi-arch tags from per-arch digests
         run: |
-          refs=""
-          for f in digests/*; do refs="$refs ${IMAGE}@$(cat "$f")"; done
-          for tag in "${PRIMARY_TAG}" "${LEGACY_PATCH_TAG}" latest; do
-            docker buildx imagetools create --tag "${IMAGE}:${tag}" $refs
+          set -euo pipefail
+          # Count first. `imagetools create` with an empty ref list is not an error, it
+          # just retags nothing, so an artifact that failed to download would publish a
+          # stale tag and report success.
+          expected=2
+          for target in python rust; do
+            n="$(find "digests/${target}" -type f | wc -l)"
+            [ "$n" -eq "$expected" ] || {
+              echo "::error::${target}: ${n} digest(s), expected ${expected}"; exit 1; }
           done
+
+          # Arrays, not a space-joined string. The refs must reach docker as separate
+          # arguments, and unquoted expansion to achieve that is SC2086: a digest
+          # containing a glob character would expand against the filesystem.
+          py_refs=()
+          for f in digests/python/*; do py_refs+=("${IMAGE}@$(cat "$f")"); done
+          for tag in "${PRIMARY_TAG}" "${LEGACY_PATCH_TAG}" latest; do
+            docker buildx imagetools create --tag "${IMAGE}:${tag}" "${py_refs[@]}"
+          done
+
+          rs_refs=()
+          for f in digests/rust/*; do rs_refs+=("${IMAGE}@$(cat "$f")"); done
+          # `latest` deliberately stays on the python image: it is the historical default
+          # and moving it would silently repoint every consumer that pins it.
+          for tag in "${RUST_PRIMARY_TAG}" "${RUST_PATCH_TAG}"; do
+            docker buildx imagetools create --tag "${IMAGE}:${tag}" "${rs_refs[@]}"
+          done
+
           docker buildx imagetools inspect "${IMAGE}:${PRIMARY_TAG}"
+          docker buildx imagetools inspect "${IMAGE}:${RUST_PRIMARY_TAG}"
 
       # Keyless OIDC signature over the published manifest digest, matching what
       # breachsafe-ux already does for qureddy-ux.
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: Sign the published digest (keyless)
+      - name: Sign the published digests (keyless)
         run: |
-          digest="$(docker buildx imagetools inspect "${IMAGE}:${PRIMARY_TAG}" --format '{{json .Manifest}}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
-          cosign sign --yes "${IMAGE}@${digest}"
+          set -euo pipefail
+          for tag in "${PRIMARY_TAG}" "${RUST_PRIMARY_TAG}"; do
+            digest="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{json .Manifest}}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
+            cosign sign --yes "${IMAGE}@${digest}"
+            echo "signed ${IMAGE}:${tag} @ ${digest}"
+          done

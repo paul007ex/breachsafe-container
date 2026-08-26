@@ -29,6 +29,7 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 | cyclonedx-cli | 0.33.1 (binary: `cyclonedx`) | release binary | per-arch SHA256-checked |
 | cosign | 3.1.3 | release binary | per-arch SHA256-checked |
 | just | 1.58.0 | release tarball (musl) | per-arch SHA256-checked |
+| Rust (rust tag only) | **1.98.0** | base image `rust:1.98.0-slim-bookworm` | base image digest-pinned |
 
 Notes:
 - **Python 3.14 only** — no 3.12 fallback (design §4.2). **NOT** free-threaded (no-GIL).
@@ -54,13 +55,53 @@ Runs as the non-root user `breachsafe` (uid/gid 1000).
 
 ## Tag scheme
 
+Two images, one OpenSSL. Both `COPY --from=openssl-build`, so the 3.5 pin is a single
+`ARG` in a single stage and cannot drift between them.
+
 ```
-ghcr.io/paul007ex/breachsafe-container:<python>-openssl<openssl>
-ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7   # primary
-ghcr.io/paul007ex/breachsafe-container:latest              # moving alias
+# Python lane
+ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5      # primary, LTS series
+ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7    # exact patch
+ghcr.io/paul007ex/breachsafe-container:latest               # moving alias, python
+
+# Rust lane
+ghcr.io/paul007ex/breachsafe-container:rust1.98-openssl3.5     # primary, LTS series
+ghcr.io/paul007ex/breachsafe-container:rust1.98.0-openssl3.5.7 # exact patch
 ```
 
+`latest` points at the Python image and stays there. The Dockerfile's last stage is
+`python`, so a bare `docker build .` still produces the Python image; the Rust one needs
+`--target rust`.
+
 Multi-arch: `linux/amd64` + `linux/arm64`. Consumers should **digest-pin** in CI.
+
+### Which lane
+
+| Repo | Lane |
+|---|---|
+| `qureddy`, `quorum`, `enxemble`, `breachsafe-mint-oscal` | Python |
+| `breachsafe-crypto-rs` (QuCrypt), `breachsafe-pki-rs` (QuCert), `breachsafe-custody` | Rust |
+| `breachsafe-evidence-go`, `breachsafe-pdf` | neither, see `breachsafe-golden-go` |
+
+The Rust lane exists because those three each rebuilt OpenSSL from source in their own
+CI, which platform `CLAUDE.md` §5 step 5 rules out. Two defects were found in those
+copies: `breachsafe-quvault-v2` verified no digest, and `breachsafe-pki-rs` pointed
+`OPENSSL_DIR` at a path nothing created, leaving its CI red from 2026-07-26.
+
+The Rust base is **bookworm, not Alpine**, and that is load-bearing. An Alpine base
+produces a musl-linked libcrypto that a glibc `cargo` build cannot link against.
+
+### What the rust tag asserts at build time
+
+The build fails, rather than publishing, unless all of these hold:
+
+| Assertion | Why |
+|---|---|
+| `openssl version` == the pinned patch | an image that links the wrong OpenSSL is invisible until a consumer's CI goes green against 3.0.x |
+| `pkg-config --modversion libcrypto` == the same | `openssl-sys` resolves through pkg-config, not through `OPENSSL_DIR` alone |
+| `rustc --version` == the pinned version | the base tag could move |
+| `cargo clippy --version`, `rustfmt --version` | both are rustup **shims** in `rust:slim`; `command -v cargo-clippy` succeeds while the component is absent, and `cargo fmt --check` then fails in every consumer |
+| `ML-DSA-65` and `ML-KEM-768` listed | the entire reason for the 3.5 pin |
 
 ## How repos consume it
 
