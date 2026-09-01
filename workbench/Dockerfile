@@ -54,7 +54,7 @@ ARG BASE=ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7
 # build arch, and clone testssl.sh at a pinned tag. TARGETARCH is amd64|arm64.
 # Same verify-then-install pattern as the base image's tool-fetch stage.
 # ---------------------------------------------------------------------------
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS fleet-fetch
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS fleet-fetch
 
 ARG TARGETARCH
 
