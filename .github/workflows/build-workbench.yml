@@ -55,9 +55,27 @@ jobs:
       - name: Verify base toolchain image is published
         run: docker buildx imagetools inspect "${BASE_IMAGE}"
 
-  build-and-push:
+  # Per-arch build on a NATIVE runner, pushed by digest. No QEMU.
+  #
+  # The previous shape was one amd64 runner + setup-qemu-action + platforms:
+  # linux/amd64,linux/arm64, which interprets every arm64 instruction under
+  # emulation. QEMU is banned (catalog #133.1). This matches the native matrix
+  # the sibling build-and-push.yml already uses: one runner per arch,
+  # ubuntu-24.04-arm is free for public repos. Tags are applied in the merge
+  # job from the per-arch digests.
+  build:
+    name: Build ${{ matrix.arch }} (native)
     needs: verify-base
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       packages: write
       contents: read
@@ -67,9 +85,6 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -81,6 +96,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Labels only. The tags block still drives the OCI image labels
+      # (org.opencontainers.image.version and friends); the actual human tags
+      # are applied in the merge job. tags output is deliberately not passed to
+      # the build, which pushes by digest.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
@@ -91,16 +110,77 @@ jobs:
             type=raw,value=${{ env.BASE_ALIGNED_TAG }}
             type=raw,value=latest
 
-      - name: Build and push (multi-arch, provenance + SBOM)
+      - name: Build + push ${{ matrix.arch }} by digest (native, no emulation)
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./workbench
           file: ./workbench/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: linux/${{ matrix.arch }}
           build-args: |
             BASE=${{ env.BASE_IMAGE }}
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           provenance: true
           sbom: true
+
+      - name: Export digest
+        run: |
+          set -euo pipefail
+          digest="${{ steps.build.outputs.digest }}"
+          [ -n "$digest" ] || { echo "::error::empty digest for ${{ matrix.arch }}"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/digests"
+          echo "$digest" > "$RUNNER_TEMP/digests/${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+
+  # Join the per-arch digests into one manifest list and apply the human tags.
+  manifest:
+    name: Merge multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create + push multi-arch tags from per-arch digests
+        run: |
+          set -euo pipefail
+          # Count first. `imagetools create` with an empty ref list is not an
+          # error, it just retags nothing, so an artifact that failed to
+          # download would publish a stale tag and report success.
+          expected=2
+          n="$(find digests -type f | wc -l)"
+          [ "$n" -eq "$expected" ] || {
+            echo "::error::${n} digest(s), expected ${expected}"; exit 1; }
+
+          # Arrays, not a space-joined string. The refs must reach docker as
+          # separate arguments, and unquoted expansion to achieve that is
+          # SC2086: a digest containing a glob character would expand against
+          # the filesystem.
+          refs=()
+          for f in digests/*; do refs+=("${IMAGE}@$(cat "$f")"); done
+          for tag in "${PRIMARY_TAG}" "${BASE_ALIGNED_TAG}" latest; do
+            docker buildx imagetools create --tag "${IMAGE}:${tag}" "${refs[@]}"
+          done
+
+          docker buildx imagetools inspect "${IMAGE}:${PRIMARY_TAG}"
