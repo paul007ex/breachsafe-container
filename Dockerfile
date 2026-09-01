@@ -20,7 +20,7 @@
 # Stage (a): OpenSSL 3.5.7 LTS from source (pattern reused verbatim from
 # breachsafe/qureddy's Dockerfile — SHA256-verified source build).
 # ---------------------------------------------------------------------------
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS openssl-build
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS openssl-build
 
 ARG OPENSSL_VERSION=3.5.7
 ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
@@ -63,7 +63,7 @@ RUN curl --fail --location --proto '=https' --connect-timeout 30 --max-time 600 
 # Stage (b): fetch + SHA256-verify pinned release binaries for the build arch.
 # TARGETARCH is provided by BuildKit (amd64 | arm64).
 # ---------------------------------------------------------------------------
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS tool-fetch
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS tool-fetch
 
 ARG TARGETARCH
 
