@@ -15,6 +15,20 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 > License: **PolyForm-Noncommercial-1.0.0** (source-available, non-commercial). This is
 > BreachSAFE first-party infrastructure, not OSI open source.
 
+## Contents
+
+1. [What's pinned](#whats-pinned)
+2. [OpenSSL environment](#openssl-environment)
+3. [Tag scheme](#tag-scheme)
+   1. [Which lane](#which-lane)
+   2. [What the rust tag asserts at build time](#what-the-rust-tag-asserts-at-build-time)
+4. [How repos consume it](#how-repos-consume-it)
+   1. [CI (`container:`)](#ci-container)
+   2. [Local dev (devcontainer)](#local-dev-devcontainer)
+5. [Build and publish](#build-and-publish)
+6. [Bumping versions](#bumping-versions)
+7. [License](#license)
+
 ## What's pinned
 
 | Component | Version | How it's installed | Verification |
@@ -24,6 +38,7 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 | uv | 0.12.5 | pip (PyPI) | version-pinned |
 | ruff | 0.16.4 | pip (PyPI) | version-pinned |
 | mypy | 2.3.1 | pip (PyPI) | version-pinned |
+| interrogate | 1.7.0 | pip (PyPI) | version-pinned; advisory docstring-coverage gate |
 | reuse | 6.2.0 (`[charset-normalizer]`) | pip (PyPI) | version-pinned |
 | gitleaks | 8.30.1 | release tarball | per-arch SHA256-checked |
 | cyclonedx-cli | 0.33.1 (binary: `cyclonedx`) | release binary | per-arch SHA256-checked |
