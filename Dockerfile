@@ -262,12 +262,13 @@ ARG UV_VERSION=0.12.5
 ARG RUFF_VERSION=0.16.4
 ARG MYPY_VERSION=2.3.1
 ARG REUSE_VERSION=6.2.0
+ARG INTERROGATE_VERSION=1.7.0
 
 ARG OPENSSL_VERSION=3.5.7
 ARG PYTHON_VERSION=3.14
 
 LABEL org.opencontainers.image.title="breachsafe-container" \
-      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/gitleaks/cyclonedx-cli/cosign/just/reuse." \
+      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
@@ -292,11 +293,12 @@ ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 ARG DEFUSEDXML_VERSION=0.7.1
-# Pinned python toolchain (uv, ruff, mypy, reuse, defusedxml) installed system-wide.
+# Pinned python toolchain (uv, ruff, mypy, interrogate, reuse, defusedxml) installed system-wide.
 RUN python3 -m pip install --no-cache-dir \
       "uv==${UV_VERSION}" \
       "ruff==${RUFF_VERSION}" \
       "mypy==${MYPY_VERSION}" \
+      "interrogate==${INTERROGATE_VERSION}" \
       "reuse[charset-normalizer]==${REUSE_VERSION}" \
       # check_no_skipped_tests.py parses JUnit XML and imports defusedxml rather
       # than stdlib ElementTree, because the XML it reads is a build artifact.
@@ -315,7 +317,8 @@ RUN python3 -m pip install --no-cache-dir \
               /usr/local/lib/python3.14/site-packages/setuptools-*.dist-info \
               /usr/local/lib/python3.14/site-packages/pkg_resources \
               /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
-    && uv --version && ruff --version && mypy --version && reuse --version \
+    && uv --version && ruff --version && mypy --version \
+    && interrogate --version && reuse --version \
     && python3 -c 'import defusedxml; print("defusedxml", defusedxml.__version__)'
 
 # Node + jscpd: the duplicate-code gate in breachsafe-common's reusable
@@ -325,7 +328,7 @@ RUN python3 -m pip install --no-cache-dir \
 # jscpd is installed here because npm needs to resolve its dependency tree at build time.
 # `jscpd --version` is asserted so a silent install failure cannot ship an image whose
 # duplicate-code gate crashes on first use — which is exactly what ERR_REQUIRE_ESM did. (#2)
-ARG JSCPD_VERSION=4.3.0
+ARG JSCPD_VERSION=5.1.1
 COPY --from=tool-fetch /out/node/ /usr/local/
 RUN set -eux; \
     node --version; \
@@ -356,4 +359,3 @@ RUN groupadd --gid 1000 breachsafe \
 USER breachsafe
 WORKDIR /home/breachsafe
 CMD ["python3"]
-
