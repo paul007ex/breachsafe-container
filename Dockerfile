@@ -3,7 +3,7 @@
 #
 # breachsafe-container — pinned BreachSAFE toolchain image (CI runtime + devcontainer).
 # Multi-stage:
-#   (a) openssl-build : OpenSSL 3.5.7 LTS from source, SHA256-verified, --prefix=/opt/openssl
+#   (a) openssl-build : OpenSSL 3.5.8 LTS from source, SHA256-verified, --prefix=/opt/openssl
 #   (b) tool-fetch    : pinned release binaries (gitleaks, cyclonedx-cli, cosign, just),
 #                       SHA256-verified per arch
 #   (c) final         : python:3.14-slim-bookworm + OpenSSL + pinned python + release tools
@@ -17,17 +17,17 @@
 # Python 3.14 ONLY (no 3.12 fallback), NOT free-threaded.
 
 # ---------------------------------------------------------------------------
-# Stage (a): OpenSSL 3.5.7 LTS from source (pattern reused verbatim from
+# Stage (a): OpenSSL 3.5.8 LTS from source (pattern reused verbatim from
 # breachsafe/qureddy's Dockerfile — SHA256-verified source build).
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS openssl-build
 
-ARG OPENSSL_VERSION=3.5.7
-ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
+ARG OPENSSL_VERSION=3.5.8
+ARG OPENSSL_SHA256=a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2
 
 # Enforce the supported range instead of documenting it. The image is tagged with
 # the LTS SERIES (3.14-openssl3.5), so any patch inside >=3.5.7,<3.6 may ship under
-# that tag, and nothing outside it may. 3.5.7 is the floor; 3.6 and 4.0 are out of
+# that tag, and nothing outside it may. 3.5.7 remains the floor; 3.6 and 4.0 are out of
 # scope for this LTS line. A build that drifts out of range fails here rather than
 # publishing an image whose tag lies about its contents.
 RUN set -eu; \
@@ -167,7 +167,7 @@ RUN set -eux; \
     rm -rf /out/node/CHANGELOG.md /out/node/LICENSE /out/node/README.md
 
 # ---------------------------------------------------------------------------
-# Stage (d): Rust toolchain + the SAME OpenSSL 3.5.7 LTS from stage (a).
+# Stage (d): Rust toolchain + the SAME OpenSSL 3.5.8 LTS from stage (a).
 #
 # Built as a separate target, published as its own tag. Serves QuCrypt, QuCert,
 # and QuCustody, which today each rebuild OpenSSL from source in their own CI
@@ -183,17 +183,17 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 FROM rust:1.98.0-slim-bookworm@sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157 AS rust
 
-ARG OPENSSL_VERSION=3.5.7
+ARG OPENSSL_VERSION=3.5.8
 ARG RUST_VERSION=1.98.0
 
 LABEL org.opencontainers.image.title="breachsafe-container-rust" \
-      org.opencontainers.image.description="Pinned BreachSAFE Rust toolchain image (CI runtime + devcontainer): Rust 1.98.0, OpenSSL 3.5.7 LTS from source, cargo/clippy/rustfmt, gitleaks/cosign/just." \
+      org.opencontainers.image.description="Pinned BreachSAFE Rust toolchain image (CI runtime + devcontainer): Rust 1.98.0, OpenSSL 3.5.8 LTS from source, cargo/clippy/rustfmt, gitleaks/cosign/just." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
       org.opencontainers.image.base.name="docker.io/library/rust:1.98.0-slim-bookworm"
 
-# OpenSSL 3.5.7 LTS from stage (a). Same bytes as the Python image.
+# OpenSSL 3.5.8 LTS from stage (a). Same bytes as the Python image.
 COPY --from=openssl-build /opt/openssl /opt/openssl
 
 # Pinned release binaries from stage (b). The Rust repos' release gates call cosign
@@ -264,17 +264,17 @@ ARG MYPY_VERSION=2.3.1
 ARG REUSE_VERSION=6.2.0
 ARG INTERROGATE_VERSION=1.7.0
 
-ARG OPENSSL_VERSION=3.5.7
+ARG OPENSSL_VERSION=3.5.8
 ARG PYTHON_VERSION=3.14
 
 LABEL org.opencontainers.image.title="breachsafe-container" \
-      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
+      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.8 LTS from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
       org.opencontainers.image.base.name="docker.io/library/python:3.14-slim-bookworm"
 
-# OpenSSL 3.5.7 LTS from stage (a).
+# OpenSSL 3.5.8 LTS from stage (a).
 COPY --from=openssl-build /opt/openssl /opt/openssl
 
 # Pinned release binaries from stage (b).

@@ -34,7 +34,7 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 | Component | Version | How it's installed | Verification |
 |---|---|---|---|
 | Python | **3.14** (3.14.7 at build) | base image `python:3.14-slim-bookworm` | base image digest-pinned |
-| OpenSSL | **3.5.7 LTS** | built from source, `--prefix=/opt/openssl` | source tarball SHA256-checked |
+| OpenSSL | **3.5.8 LTS** | built from source, `--prefix=/opt/openssl` | source tarball SHA256-checked |
 | uv | 0.12.5 | pip (PyPI) | version-pinned |
 | ruff | 0.16.4 | pip (PyPI) | version-pinned |
 | mypy | 2.3.1 | pip (PyPI) | version-pinned |
@@ -77,12 +77,12 @@ Two images, one OpenSSL. Both `COPY --from=openssl-build`, so the 3.5 pin is a s
 ```
 # Python lane
 ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5      # primary, LTS series
-ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7    # exact patch
+ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.8    # exact patch
 ghcr.io/paul007ex/breachsafe-container:latest               # moving alias, python
 
 # Rust lane
 ghcr.io/paul007ex/breachsafe-container:rust1.98-openssl3.5     # primary, LTS series
-ghcr.io/paul007ex/breachsafe-container:rust1.98.0-openssl3.5.7 # exact patch
+ghcr.io/paul007ex/breachsafe-container:rust1.98.0-openssl3.5.8 # exact patch
 ```
 
 `latest` points at the Python image and stays there. The Dockerfile's last stage is
@@ -130,7 +130,7 @@ jobs:
   gates:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7
+      image: ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.8
     steps:
       - uses: actions/checkout@<sha> # v5
       - run: uv sync --locked --extra dev
