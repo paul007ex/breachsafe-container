@@ -28,11 +28,11 @@ env:
   PRIMARY_TAG: 3.14-openssl3.5
   # Kept so existing consumers pinning the patch tag do not break. Remove once
   # every consumer has moved to the series tag.
-  LEGACY_PATCH_TAG: 3.14-openssl3.5.7
+  LEGACY_PATCH_TAG: 3.14-openssl3.5.8
   # Rust target, same OpenSSL, same tag scheme. Serves QuCrypt, QuCert and QuCustody,
   # which today each rebuild OpenSSL from source in their own CI.
   RUST_PRIMARY_TAG: rust1.98-openssl3.5
-  RUST_PATCH_TAG: rust1.98.0-openssl3.5.7
+  RUST_PATCH_TAG: rust1.98.0-openssl3.5.8
 
 permissions:
   contents: read
@@ -42,7 +42,7 @@ jobs:
   #
   # The previous shape was one amd64 runner + setup-qemu-action + platforms:
   # linux/amd64,linux/arm64, which interprets every arm64 instruction — including the
-  # whole OpenSSL 3.5.7 source compile. Measured: that took 21-30 min. breachsafe/qureddy
+  # whole OpenSSL 3.5.8 source compile. Measured: that took 21-30 min. breachsafe/qureddy
   # already builds the same OpenSSL-from-source multi-arch image with this matrix and
   # finishes in 3 min. This ports that pattern over. ubuntu-24.04-arm is free for public
   # repos, which this became on 2026-08-22.
