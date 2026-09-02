@@ -39,6 +39,7 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 | ruff | 0.16.4 | pip (PyPI) | version-pinned |
 | mypy | 2.3.1 | pip (PyPI) | version-pinned |
 | interrogate | 1.7.0 | pip (PyPI) | version-pinned; advisory docstring-coverage gate |
+| jscpd | 5.1.1 | npm (global) | version-pinned; duplicate-code gate |
 | reuse | 6.2.0 (`[charset-normalizer]`) | pip (PyPI) | version-pinned |
 | gitleaks | 8.30.1 | release tarball | per-arch SHA256-checked |
 | cyclonedx-cli | 0.33.1 (binary: `cyclonedx`) | release binary | per-arch SHA256-checked |

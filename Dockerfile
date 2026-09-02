@@ -268,7 +268,7 @@ ARG OPENSSL_VERSION=3.5.7
 ARG PYTHON_VERSION=3.14
 
 LABEL org.opencontainers.image.title="breachsafe-container" \
-      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/interrogate/gitleaks/cyclonedx-cli/cosign/just/reuse." \
+      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.7 LTS from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
@@ -328,7 +328,7 @@ RUN python3 -m pip install --no-cache-dir \
 # jscpd is installed here because npm needs to resolve its dependency tree at build time.
 # `jscpd --version` is asserted so a silent install failure cannot ship an image whose
 # duplicate-code gate crashes on first use — which is exactly what ERR_REQUIRE_ESM did. (#2)
-ARG JSCPD_VERSION=4.3.0
+ARG JSCPD_VERSION=5.1.1
 COPY --from=tool-fetch /out/node/ /usr/local/
 RUN set -eux; \
     node --version; \
