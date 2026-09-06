@@ -8,7 +8,7 @@
 #               crypto/TLS, recon } scanners.
 #
 # Layering: this image is FROM the pinned base toolchain image. It inherits
-# Python 3.14, OpenSSL 3.5.7 LTS (/opt/openssl), uv/ruff/mypy/reuse, and the
+# Python 3.14, OpenSSL 3.5.8 LTS (/opt/openssl), uv/ruff/mypy/reuse, and the
 # base release binaries (gitleaks, cyclonedx, cosign, just). It ADDS the
 # scan fleet below. Tool choices are grounded in
 # breachsafe-common/reference/CATALOG.md (AppSec/SCA/DAST fleet + crypto/TLS +
@@ -47,7 +47,7 @@
 # Base image to layer on. Declared in global scope (before the first FROM) so it
 # is usable by the final `FROM ${BASE}`. Override at build time:
 #   --build-arg BASE=breachsafe-container:test
-ARG BASE=ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7
+ARG BASE=ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5
 
 # ---------------------------------------------------------------------------
 # Stage: fleet-fetch — download + SHA256-verify pinned release binaries for the

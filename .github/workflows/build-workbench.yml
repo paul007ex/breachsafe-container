@@ -24,11 +24,11 @@ env:
   IMAGE: ghcr.io/paul007ex/breachsafe-workbench
   # The base toolchain image this workbench layers on. Keep in sync with the
   # Dockerfile's BASE ARG default and with build-and-push.yml's PRIMARY_TAG.
-  BASE_IMAGE: ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7
+  BASE_IMAGE: ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5
   # Workbench fleet version (its own line, independent of the base toolchain).
   PRIMARY_TAG: 0.1.0
   # Base-aligned alias: records which base toolchain this build layered on.
-  BASE_ALIGNED_TAG: 3.14-openssl3.5.7
+  BASE_ALIGNED_TAG: 3.14-openssl3.5
 
 permissions:
   contents: read
