@@ -281,6 +281,16 @@ ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
     PYTHONDONTWRITEBYTECODE=1 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
+# Capability contract: the modern binary serves current/PQC probing and the
+# isolated 1.0.2u binary serves intentional legacy-cipher evidence. Presence
+# of the EOL binary is not a vulnerability failure; missing, mislabeled, or
+# unusable capability is.
+RUN set -eux; \
+    /opt/openssl/bin/openssl version | grep -q '^OpenSSL 3\.5\.8 '; \
+    /opt/openssl/bin/openssl list -tls1_3 -tls-groups | grep -q X25519MLKEM768; \
+    /opt/openssl-legacy/bin/openssl version | grep -q '^OpenSSL 1\.0\.2u '; \
+    /opt/openssl-legacy/bin/openssl ciphers | tr ':' '\n' | grep -qx RC4-SHA
+
 ARG DEFUSEDXML_VERSION=0.7.1
 # Pinned python toolchain (uv, ruff, mypy, interrogate, reuse, defusedxml) installed system-wide.
 RUN python3 -m pip install --no-cache-dir \
