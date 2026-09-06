@@ -32,7 +32,8 @@ produces the Python image; the Rust image needs `--target rust`.
 | Component | Value | `Dockerfile` ARG |
 |---|---|---|
 | Python | 3.14 | `PYTHON_VERSION=3.14`, base `python:3.14-slim-bookworm` |
-| OpenSSL | 3.5.7 LTS, built from source | `OPENSSL_VERSION=3.5.7` + `OPENSSL_SHA256=…` |
+| OpenSSL | 3.5.8 LTS, built from source | `OPENSSL_VERSION=3.5.8` + `OPENSSL_SHA256=…` |
+| OpenSSL legacy | 1.0.2u, built from source, python lane only | `LEGACY_OPENSSL_VERSION=1.0.2u` + `LEGACY_OPENSSL_SHA256=…` |
 | Rust (rust lane only) | 1.98.0 | `RUST_VERSION=1.98.0`, base `rust:1.98.0-slim-bookworm` |
 
 `OPENSSL_VERSION` is redeclared per stage (lines 25, 186, 266) and gated to `>=3.5.7,<3.6`
@@ -76,7 +77,7 @@ docker run --rm breachsafe-container:test python3 --version
 docker run --rm breachsafe-container:test openssl version
 ```
 
-Expect Python 3.14.x and OpenSSL 3.5.7. The build already fails, rather than publishing,
+Expect Python 3.14.x and OpenSSL 3.5.8, plus legacy OpenSSL 1.0.2u at /opt/openssl-legacy. The build already fails, rather than publishing,
 if `openssl version` or `pkg-config --modversion libcrypto` disagrees with the pin.
 Multi-arch publish is `.github/workflows/build-and-push.yml`; `build-workbench.yml` builds
 the workbench image.

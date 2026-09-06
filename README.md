@@ -35,6 +35,7 @@ spec, `docs/specs/2026-08-22-breachsafe-repo-design.md` in
 |---|---|---|---|
 | Python | **3.14** (3.14.7 at build) | base image `python:3.14-slim-bookworm` | base image digest-pinned |
 | OpenSSL | **3.5.8 LTS** | built from source, `--prefix=/opt/openssl` | source tarball SHA256-checked |
+| OpenSSL legacy | **1.0.2u** | built from source, `--prefix=/opt/openssl-legacy`, python lane only | source tarball SHA256-checked |
 | uv | 0.12.5 | pip (PyPI) | version-pinned |
 | ruff | 0.16.4 | pip (PyPI) | version-pinned |
 | mypy | 2.3.1 | pip (PyPI) | version-pinned |
@@ -60,12 +61,21 @@ Notes:
 The from-source OpenSSL is exposed via env so consumers find it without guessing:
 
 ```
-QUREDDY_OPENSSL=/opt/openssl/bin/openssl     # QuReddy convention
+QUREDDY_OPENSSL=/opt/openssl/bin/openssl              # QuReddy convention
+QUREDDY_OPENSSL_LEGACY=/opt/openssl-legacy/bin/openssl  # legacy compatibility lane
 OPENSSL_DIR=/opt/openssl                      # Rust crates (crypto-rs/pki-rs) convention
 OPENSSL_ROOT_DIR=/opt/openssl                 # CMake convention
 LD_LIBRARY_PATH=/opt/openssl/lib64:/opt/openssl/lib
 PATH=/opt/openssl/bin:/usr/local/bin:$PATH
 ```
+
+`/opt/openssl-legacy/bin` is deliberately **not** on `PATH`. `openssl` always resolves to
+3.5.8; the 1.0.2u binary is reached by absolute path or `QUREDDY_OPENSSL_LEGACY`.
+
+The legacy build exists to negotiate what 3.5 refuses to offer (RC4, 3DES, DES, SSLv3,
+export suites), so a scan can report those as observed rather than as absent. It is a
+measurement instrument. Nothing may use it to originate security-relevant traffic. It is
+`no-shared`, so it is a standalone binary that cannot be linked against.
 
 Runs as the non-root user `breachsafe` (uid/gid 1000).
 

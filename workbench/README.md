@@ -18,10 +18,10 @@ workbench = breachsafe-container (base toolchain) + scan fleet
 ## Base -> workbench layering
 
 This image is `FROM` the pinned base image
-(`ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5.7`). From the base it
+(`ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5`). From the base it
 inherits, and does **not** re-install:
 
-- Python **3.14** and **OpenSSL 3.5.7 LTS** built from source at `/opt/openssl`
+- Python **3.14** and **OpenSSL 3.5.8 LTS** built from source at `/opt/openssl`
   (exposed via `OPENSSL_DIR` / `QUREDDY_OPENSSL` / `LD_LIBRARY_PATH`).
 - `uv`, `ruff`, `mypy`, `reuse` (PyPI, pinned).
 - `gitleaks`, `cyclonedx`, `cosign`, `just` (release binaries, pinned).
@@ -54,7 +54,7 @@ Notes:
 
 - **sslyze has no `--version` flag.** The version prints in the `sslyze --help`
   header (`SSLyze version 6.3.1`). Every other tool takes a real version flag.
-- **testssl.sh uses the base's OpenSSL 3.5.7** (found on `PATH` via
+- **testssl.sh uses the base's OpenSSL 3.5.8** (found on `PATH` via
   `/opt/openssl/bin`), so its cipher/protocol coverage matches the rest of BQP.
 - **nuclei templates are NOT baked in.** Run `nuclei -update-templates` at
   runtime to fetch/refresh them; they are written under `$HOME/.config/nuclei`
@@ -111,7 +111,7 @@ docker run --rm -it -v "$PWD:/src" breachsafe-workbench
 ```
 ghcr.io/paul007ex/breachsafe-workbench:<ver>
 ghcr.io/paul007ex/breachsafe-workbench:0.1.0                  # fleet version (primary)
-ghcr.io/paul007ex/breachsafe-workbench:3.14-openssl3.5.7      # base-aligned alias
+ghcr.io/paul007ex/breachsafe-workbench:3.14-openssl3.5      # base-aligned alias
 ghcr.io/paul007ex/breachsafe-workbench:latest                 # moving alias
 ```
 

@@ -4,6 +4,8 @@
 # breachsafe-container — pinned BreachSAFE toolchain image (CI runtime + devcontainer).
 # Multi-stage:
 #   (a) openssl-build : OpenSSL 3.5.8 LTS from source, SHA256-verified, --prefix=/opt/openssl
+#   (a2) openssl-legacy-build : OpenSSL 1.0.2u from source, SHA256-verified,
+#                       --prefix=/opt/openssl-legacy, for the legacy compatibility lane
 #   (b) tool-fetch    : pinned release binaries (gitleaks, cyclonedx-cli, cosign, just),
 #                       SHA256-verified per arch
 #   (c) final         : python:3.14-slim-bookworm + OpenSSL + pinned python + release tools
@@ -58,6 +60,56 @@ RUN curl --fail --location --proto '=https' --connect-timeout 30 --max-time 600 
     && make -j"$(nproc)" apps/openssl \
     && make install_sw \
     && rm -rf /tmp/openssl.tar.gz /tmp/openssl-src
+
+# ---------------------------------------------------------------------------
+# Stage (a2): OpenSSL 1.0.2u from source, for the legacy compatibility lane.
+#
+# 3.5 will not offer RC4, 3DES, DES, SSLv3 or export suites, so a scanner built
+# only on it reports "not observed" for an endpoint that accepts nothing else.
+# This runtime exists to negotiate exactly those, and never to originate
+# security-relevant traffic. It is a measurement instrument, not a TLS stack we
+# trust: `no-shared` keeps it a standalone binary that cannot be linked against,
+# and it installs under its own prefix so it can never shadow /opt/openssl.
+#
+# ubuntu:20.04 because 1.0.2u predates bookworm's toolchain and does not build
+# cleanly against it. Moved here from breachsafe/qureddy's Dockerfile so no
+# consumer compiles OpenSSL again.
+# ---------------------------------------------------------------------------
+FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214 AS openssl-legacy-build
+
+ARG TARGETARCH
+ARG LEGACY_OPENSSL_VERSION=1.0.2u
+ARG LEGACY_OPENSSL_SHA256=ecd0c6ffb493dd06707d38b14bb4d8c2288bb7033735606569d8f90f89669d16
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl perl make \
+    && rm -rf /var/lib/apt/lists/* \
+    # Prefer the signed upstream release mirror; retain openssl.org as a fallback because
+    # either public endpoint can be transiently unavailable in a hosted builder.
+    && (curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
+      "https://github.com/openssl/openssl/releases/download/OpenSSL_${LEGACY_OPENSSL_VERSION}/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
+      --output /tmp/openssl-legacy.tar.gz \
+      || curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
+      "https://www.openssl.org/source/old/1.0.2/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
+      --output /tmp/openssl-legacy.tar.gz) \
+    && echo "${LEGACY_OPENSSL_SHA256}  /tmp/openssl-legacy.tar.gz" | sha256sum --check --strict \
+    && mkdir /tmp/openssl-legacy-src \
+    && tar --extract --gzip --strip-components=1 --file /tmp/openssl-legacy.tar.gz --directory /tmp/openssl-legacy-src \
+    && cd /tmp/openssl-legacy-src \
+    && case "${TARGETARCH}" in \
+      amd64) configure_target=linux-x86_64 ;; \
+      arm64) configure_target=linux-aarch64 ;; \
+      *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && ./Configure "${configure_target}" no-shared enable-ssl3 enable-weak-ssl-ciphers --prefix=/opt/openssl-legacy \
+    && make depend \
+    && make -j"$(nproc)" \
+    && make install_sw \
+    && install -D -m 0755 /opt/openssl-legacy/bin/openssl /opt/openssl-legacy-runtime/bin/openssl \
+    && install -D -m 0644 LICENSE /opt/openssl-legacy-runtime/LICENSE \
+    && install -D -m 0644 /opt/openssl-legacy/ssl/openssl.cnf /opt/openssl-legacy-runtime/ssl/openssl.cnf \
+    && /opt/openssl-legacy-runtime/bin/openssl version
 
 # ---------------------------------------------------------------------------
 # Stage (b): fetch + SHA256-verify pinned release binaries for the build arch.
@@ -268,7 +320,7 @@ ARG OPENSSL_VERSION=3.5.8
 ARG PYTHON_VERSION=3.14
 
 LABEL org.opencontainers.image.title="breachsafe-container" \
-      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.8 LTS from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
+      org.opencontainers.image.description="Pinned BreachSAFE toolchain image (CI runtime + devcontainer): Python 3.14, OpenSSL 3.5.8 LTS and legacy OpenSSL 1.0.2u from source, uv/ruff/mypy/interrogate/jscpd/gitleaks/cyclonedx-cli/cosign/just/reuse." \
       org.opencontainers.image.source="https://github.com/paul007ex/breachsafe-container" \
       org.opencontainers.image.vendor="BreachSAFE" \
       org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
@@ -277,12 +329,18 @@ LABEL org.opencontainers.image.title="breachsafe-container" \
 # OpenSSL 3.5.8 LTS from stage (a).
 COPY --from=openssl-build /opt/openssl /opt/openssl
 
+# OpenSSL 1.0.2u from stage (a2), for the legacy compatibility lane. Its own prefix,
+# never on PATH: a consumer reaches it by absolute path or QUREDDY_OPENSSL_LEGACY, so it
+# cannot be picked up as the default openssl by accident.
+COPY --from=openssl-legacy-build /opt/openssl-legacy-runtime /opt/openssl-legacy
+
 # Pinned release binaries from stage (b).
 COPY --from=tool-fetch /out/bin/ /usr/local/bin/
 
 # OpenSSL env: expose the from-source build to consumers (QUREDDY_OPENSSL is the
 # convention QuReddy reads; OPENSSL_DIR is the convention the Rust crates read).
 ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
+    QUREDDY_OPENSSL_LEGACY=/opt/openssl-legacy/bin/openssl \
     OPENSSL_DIR=/opt/openssl \
     OPENSSL_ROOT_DIR=/opt/openssl \
     LD_LIBRARY_PATH=/opt/openssl/lib64:/opt/openssl/lib \
