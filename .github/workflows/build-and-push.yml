@@ -22,9 +22,9 @@ env:
   IMAGE: ghcr.io/paul007ex/breachsafe-container
   # Tag scheme: <python>-opensslMAJOR.MINOR, the LTS SERIES, deliberately not the
   # patch. Consumers pin the series so a 3.5.7 -> 3.5.8 bump does not force an edit
-  # in every repo's .github/bqp.env. The Dockerfile still pins an exact patch plus
-  # sha256, because it builds OpenSSL from source and a checksum is meaningless
-  # without an exact version. Floor is 3.5.7; the series moves within >=3.5.7,<3.6.
+  # in every repo's .github/bqp.env. The Dockerfile pins an exact patch by image
+  # digest instead of a source checksum, because it no longer builds OpenSSL from
+  # source. Floor is 3.5.7; the series moves within >=3.5.7,<3.6.
   PRIMARY_TAG: 3.14-openssl3.5
   # Kept so existing consumers pinning the patch tag do not break. Remove once
   # every consumer has moved to the series tag.

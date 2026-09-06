@@ -1,8 +1,13 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE <https://www.breachsafe.io>
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 #
-# breachsafe-openssl — the OpenSSL binaries as standalone, digest-addressable
-# artifacts, so no repository compiles OpenSSL in its own image build.
+# breachsafe-openssl — the OpenSSL binaries BreachSAFE builds, as standalone
+# digest-addressable images, so no repository compiles OpenSSL in its own build.
+#
+# Publishes two names from the same bytes:
+#   breachsafe-openssl         PRIMARY. What every image builds FROM.
+#   breachsafe-openssl-backup  INSURANCE. Nothing builds from it. It exists so the
+#                              binaries survive a retag or deletion of the primary.
 #
 # This file does not compile anything and does not copy from a third party. It
 # extracts the binaries BreachSAFE already published, from a digest-pinned
@@ -15,9 +20,11 @@
 # history at fb25214.
 #
 #   docker buildx build --target openssl35 \
-#     -t ghcr.io/paul007ex/breachsafe-openssl:3.5.8 openssl/
+#     -t ghcr.io/paul007ex/breachsafe-openssl:3.5.8 \
+#     -t ghcr.io/paul007ex/breachsafe-openssl-backup:3.5.8 openssl/
 #   docker buildx build --target openssl102u \
-#     -t ghcr.io/paul007ex/breachsafe-openssl:1.0.2u openssl/
+#     -t ghcr.io/paul007ex/breachsafe-openssl:1.0.2u \
+#     -t ghcr.io/paul007ex/breachsafe-openssl-backup:1.0.2u openssl/
 
 # The BreachSAFE image that already carries both prefixes, pinned by digest.
 ARG SOURCE_IMAGE=ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5@sha256:15eb1539a7a0045b6eaae18d636802c34d1ec8dde12f7814dd4d6dd6689fd285

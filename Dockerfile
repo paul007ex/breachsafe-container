@@ -29,6 +29,8 @@
 # Nothing here compiles OpenSSL and nothing here copies from a third party.
 # breachsafe-openssl carries the binaries BreachSAFE already built, addressed by
 # digest, so an ordinary toolchain build is a COPY rather than a source build.
+# breachsafe-openssl-backup holds the same bytes as insurance; nothing builds from
+# it, so a mistake there cannot reach an image.
 # Producing a new OpenSSL version is a separate deliberate act; see
 # openssl/Dockerfile.
 # ---------------------------------------------------------------------------
