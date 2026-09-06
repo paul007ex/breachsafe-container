@@ -3,44 +3,113 @@
 #
 # breachsafe-container — pinned BreachSAFE toolchain image (CI runtime + devcontainer).
 # Multi-stage:
-#   (a) openssl-build : OpenSSL 3.5.8 LTS, pulled prebuilt and digest-pinned from
-#                       ghcr.io/paul007ex/breachsafe-openssl, --prefix=/opt/openssl
-#   (a2) openssl-legacy-build : OpenSSL 1.0.2u, same source, --prefix=/opt/openssl-legacy,
-#                       for the legacy compatibility lane
+#   (a) openssl-build : OpenSSL 3.5.8 LTS from source, SHA256-verified, --prefix=/opt/openssl
+#   (a2) openssl-legacy-build : OpenSSL 1.0.2u from source, SHA256-verified,
+#                       --prefix=/opt/openssl-legacy, for the legacy compatibility lane
 #   (b) tool-fetch    : pinned release binaries (gitleaks, cyclonedx-cli, cosign, just),
 #                       SHA256-verified per arch
 #   (c) final         : python:3.14-slim-bookworm + OpenSSL + pinned python + release tools
 #   (d) rust          : rust:slim-bookworm + the SAME OpenSSL from (a)
 #
-# No stage compiles OpenSSL. An ordinary build of this image is a COPY, not a source
-# build, and the binaries come from BreachSAFE's own registry rather than a third party.
-# Producing a NEW OpenSSL version is a separate deliberate act; see openssl/Dockerfile.
-#
 # Two published targets, one OpenSSL. Stage (d) is a build target, not a layer of (c):
 # the Rust toolchain is ~700 MB and no Python consumer calls cargo, so it is not carried
-# into the default image. Both COPY --from=openssl-build, so the 3.5 pin is one digest in
+# into the default image. Both COPY --from=openssl-build, so the 3.5 pin is one ARG in
 # one stage and cannot drift between them (#3).
 #
 # Python 3.14 ONLY (no 3.12 fallback), NOT free-threaded.
 
 # ---------------------------------------------------------------------------
-# Stages (a) and (a2): OpenSSL, pulled prebuilt from BreachSAFE's own registry.
-#
-# Nothing here compiles OpenSSL and nothing here copies from a third party.
-# breachsafe-openssl carries the binaries BreachSAFE already built, addressed by
-# digest, so an ordinary toolchain build is a COPY rather than a source build.
-# breachsafe-openssl-backup holds the same bytes as insurance; nothing builds from
-# it, so a mistake there cannot reach an image.
-# Producing a new OpenSSL version is a separate deliberate act; see
-# openssl/Dockerfile.
+# Stage (a): OpenSSL 3.5.8 LTS from source (pattern reused verbatim from
+# breachsafe/qureddy's Dockerfile — SHA256-verified source build).
 # ---------------------------------------------------------------------------
-FROM ghcr.io/paul007ex/breachsafe-openssl:3.5.8@sha256:fc377a84e31b94081259199905c33e91227778d2535261478c3735ba69d2061e AS openssl-build
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS openssl-build
+
+ARG OPENSSL_VERSION=3.5.8
+ARG OPENSSL_SHA256=a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2
+
+# Enforce the supported range instead of documenting it. The image is tagged with
+# the LTS SERIES (3.14-openssl3.5), so any patch inside >=3.5.7,<3.6 may ship under
+# that tag, and nothing outside it may. 3.5.7 remains the floor; 3.6 and 4.0 are out of
+# scope for this LTS line. A build that drifts out of range fails here rather than
+# publishing an image whose tag lies about its contents.
+RUN set -eu; \
+    case "${OPENSSL_VERSION}" in \
+      3.5.*) ;; \
+      *) echo "OPENSSL_VERSION=${OPENSSL_VERSION} is outside the 3.5 LTS series" >&2; exit 1 ;; \
+    esac; \
+    patch="${OPENSSL_VERSION#3.5.}"; \
+    case "$patch" in \
+      ''|*[!0-9]*) echo "OPENSSL_VERSION=${OPENSSL_VERSION} has no numeric patch" >&2; exit 1 ;; \
+    esac; \
+    [ "$patch" -ge 7 ] || { echo "OPENSSL_VERSION=${OPENSSL_VERSION} is below the 3.5.7 floor" >&2; exit 1; }; \
+    echo "OpenSSL ${OPENSSL_VERSION} is within >=3.5.7,<3.6"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates curl perl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --fail --location --proto '=https' --connect-timeout 30 --max-time 600 \
+      "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+      --output /tmp/openssl.tar.gz \
+    && echo "${OPENSSL_SHA256}  /tmp/openssl.tar.gz" | sha256sum --check --strict \
+    && mkdir /tmp/openssl-src \
+    && tar --extract --gzip --strip-components=1 --file /tmp/openssl.tar.gz --directory /tmp/openssl-src \
+    && cd /tmp/openssl-src \
+    && ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl shared no-tests \
+    && make -j"$(nproc)" build_libs \
+    && make -j"$(nproc)" apps/openssl \
+    && make install_sw \
+    && rm -rf /tmp/openssl.tar.gz /tmp/openssl-src
 
 # ---------------------------------------------------------------------------
-# OpenSSL 1.0.2u. EOL by design: the compatibility lane measures what a weak
-# client can still negotiate. Never link a product against it.
+# Stage (a2): OpenSSL 1.0.2u from source, for the legacy compatibility lane.
+#
+# 3.5 will not offer RC4, 3DES, DES, SSLv3 or export suites, so a scanner built
+# only on it reports "not observed" for an endpoint that accepts nothing else.
+# This runtime exists to negotiate exactly those, and never to originate
+# security-relevant traffic. It is a measurement instrument, not a TLS stack we
+# trust: `no-shared` keeps it a standalone binary that cannot be linked against,
+# and it installs under its own prefix so it can never shadow /opt/openssl.
+#
+# ubuntu:20.04 because 1.0.2u predates bookworm's toolchain and does not build
+# cleanly against it. Moved here from breachsafe/qureddy's Dockerfile so no
+# consumer compiles OpenSSL again.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/paul007ex/breachsafe-openssl:1.0.2u@sha256:378b91d69838bd84f126d0cac6fe3a196d70c3d96b0ac78a18602fa554b26821 AS openssl-legacy-build
+FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214 AS openssl-legacy-build
+
+ARG TARGETARCH
+ARG LEGACY_OPENSSL_VERSION=1.0.2u
+ARG LEGACY_OPENSSL_SHA256=ecd0c6ffb493dd06707d38b14bb4d8c2288bb7033735606569d8f90f89669d16
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl perl make \
+    && rm -rf /var/lib/apt/lists/* \
+    # Prefer the signed upstream release mirror; retain openssl.org as a fallback because
+    # either public endpoint can be transiently unavailable in a hosted builder.
+    && (curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
+      "https://github.com/openssl/openssl/releases/download/OpenSSL_${LEGACY_OPENSSL_VERSION}/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
+      --output /tmp/openssl-legacy.tar.gz \
+      || curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
+      "https://www.openssl.org/source/old/1.0.2/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
+      --output /tmp/openssl-legacy.tar.gz) \
+    && echo "${LEGACY_OPENSSL_SHA256}  /tmp/openssl-legacy.tar.gz" | sha256sum --check --strict \
+    && mkdir /tmp/openssl-legacy-src \
+    && tar --extract --gzip --strip-components=1 --file /tmp/openssl-legacy.tar.gz --directory /tmp/openssl-legacy-src \
+    && cd /tmp/openssl-legacy-src \
+    && case "${TARGETARCH}" in \
+      amd64) configure_target=linux-x86_64 ;; \
+      arm64) configure_target=linux-aarch64 ;; \
+      *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && ./Configure "${configure_target}" no-shared enable-ssl3 enable-weak-ssl-ciphers --prefix=/opt/openssl-legacy \
+    && make depend \
+    && make -j"$(nproc)" \
+    && make install_sw \
+    && install -D -m 0755 /opt/openssl-legacy/bin/openssl /opt/openssl-legacy-runtime/bin/openssl \
+    && install -D -m 0644 LICENSE /opt/openssl-legacy-runtime/LICENSE \
+    && install -D -m 0644 /opt/openssl-legacy/ssl/openssl.cnf /opt/openssl-legacy-runtime/ssl/openssl.cnf \
+    && /opt/openssl-legacy-runtime/bin/openssl version
 
 # ---------------------------------------------------------------------------
 # Stage (b): fetch + SHA256-verify pinned release binaries for the build arch.
@@ -263,7 +332,7 @@ COPY --from=openssl-build /opt/openssl /opt/openssl
 # OpenSSL 1.0.2u from stage (a2), for the legacy compatibility lane. Its own prefix,
 # never on PATH: a consumer reaches it by absolute path or QUREDDY_OPENSSL_LEGACY, so it
 # cannot be picked up as the default openssl by accident.
-COPY --from=openssl-legacy-build /opt/openssl-legacy /opt/openssl-legacy
+COPY --from=openssl-legacy-build /opt/openssl-legacy-runtime /opt/openssl-legacy
 
 # Pinned release binaries from stage (b).
 COPY --from=tool-fetch /out/bin/ /usr/local/bin/
