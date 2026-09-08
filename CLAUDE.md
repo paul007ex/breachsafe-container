@@ -36,7 +36,7 @@ produces the Python image; the Rust image needs `--target rust`.
 | OpenSSL legacy | 1.0.2u, built from source, python lane only | `LEGACY_OPENSSL_VERSION=1.0.2u` + `LEGACY_OPENSSL_SHA256=…` |
 | Rust (rust lane only) | 1.98.0 | `RUST_VERSION=1.98.0`, base `rust:1.98.0-slim-bookworm` |
 
-`OPENSSL_VERSION` is redeclared per stage (lines 25, 186, 266) and gated to `>=3.5.7,<3.6`
+`OPENSSL_VERSION` is redeclared per stage (lines 25, 186, 266) and gated to `>=3.5.8,<3.6`
 by an in-Dockerfile check that fails the build outside that range. The Rust base is
 bookworm, not Alpine, and that is load-bearing: musl libcrypto cannot link a glibc `cargo`
 build.
