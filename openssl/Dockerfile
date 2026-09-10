@@ -102,7 +102,7 @@ FROM ossl40-src AS ossl40-stock
 
 RUN set -eux; \
     ./Configure --prefix=/opt/openssl-stock --openssldir=/opt/openssl-stock/ssl \
-      shared no-tests; \
+      shared no-tests "-Wl,-rpath,/opt/openssl-stock/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw
@@ -131,7 +131,8 @@ FROM ossl40-src AS ossl40-weak
 RUN set -eux; \
     ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl \
       shared no-tests \
-      enable-weak-ssl-ciphers enable-idea enable-seed; \
+      enable-weak-ssl-ciphers enable-idea enable-seed \
+      "-Wl,-rpath,/opt/openssl/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw
@@ -271,7 +272,8 @@ FROM ossl35-src AS ossl35-weak
 RUN set -eux; \
     ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl \
       shared no-tests \
-      enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-idea enable-seed; \
+      enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-idea enable-seed \
+      "-Wl,-rpath,/opt/openssl/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw

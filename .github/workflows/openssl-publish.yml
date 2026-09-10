@@ -224,19 +224,25 @@ jobs:
       # A green build proves the build ran, not that the published tag carries what
       # its name promises. Pull what was just pushed and make the binaries speak,
       # on every architecture published rather than only the one that is convenient.
+      #
+      # The base is python:3.14-slim-bookworm on purpose. It ships its own
+      # libssl.so.3, so a prefix without a RUNPATH resolves to the distribution's
+      # OpenSSL instead of ours. debian:bookworm-slim carries no libssl.so.3 and
+      # passed this check while the published binary had no RUNPATH at all (#50).
+      # Neither ldconfig nor LD_LIBRARY_PATH is set here: the prefix has to stand
+      # on its own, because that is what a consumer copying it will assume.
       - name: Pull the published tags and make the binaries report their version
         run: |
           set -euo pipefail
           cat > Dockerfile.assert <<DOCKERFILE
           FROM ${PRIMARY}:latest AS o35
           FROM ${PRIMARY}:1.0.2u AS o102
-          FROM debian:bookworm-slim
+          FROM python:3.14-slim-bookworm
           COPY --from=o35 /opt/openssl /opt/openssl
           COPY --from=o102 /opt/openssl-legacy /opt/openssl-legacy
-          RUN echo /opt/openssl/lib > /etc/ld.so.conf.d/openssl.conf \\
-              && echo /opt/openssl/lib64 >> /etc/ld.so.conf.d/openssl.conf \\
-              && ldconfig \\
+          RUN test -e /lib/*/libssl.so.3 \\
               && /opt/openssl/bin/openssl version | grep -qF "OpenSSL ${V35} " \\
+              && /opt/openssl/bin/openssl version | grep -qF "Library: OpenSSL ${V35} " \\
               && /opt/openssl-legacy/bin/openssl version | grep -q '^OpenSSL 1\.0\.2u ' \\
               && /opt/openssl/bin/openssl ciphers 'RC4:@SECLEVEL=0' | grep -q RC4 \\
               && /opt/openssl/bin/openssl list -kem-algorithms | grep -q 'ML-KEM-768' \\
