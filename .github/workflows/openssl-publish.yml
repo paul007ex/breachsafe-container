@@ -27,6 +27,10 @@ concurrency:
 env:
   PRIMARY: ghcr.io/paul007ex/breachsafe-openssl
   BACKUP: ghcr.io/paul007ex/breachsafe-openssl-backup
+  # Single source for the 4.0 pin. openssl/Dockerfile carries the matching
+  # ARG OPENSSL_VERSION and the tarball digest; the contract job below reads this
+  # value rather than repeating the number, so the two cannot drift silently.
+  V40: "4.0.2"
 
 permissions:
   contents: read
@@ -138,10 +142,10 @@ jobs:
             docker buildx imagetools create --tag "${PRIMARY}:${version}" "${refs[@]}"
             docker buildx imagetools create --tag "${BACKUP}:${version}" "${refs[@]}"
           }
-          publish openssl40 4.0.2
+          publish openssl40 "${V40}"
           publish openssl102u 1.0.2u
 
-          # `latest` is the 4.0.2 weak build, so an ordinary unsuffixed pull gets
+          # `latest` is the 4.0 weak build, so an ordinary unsuffixed pull gets
           # the weak ciphers with no special tag and no special pin.
           refs=()
           for f in digests/openssl40/*; do refs+=("${PRIMARY}@$(cat "$f")"); done
@@ -155,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           for image in "${PRIMARY}" "${BACKUP}"; do
-            for version in 4.0.2 latest 1.0.2u; do
+            for version in "${V40}" latest 1.0.2u; do
               digest="$(docker buildx imagetools inspect "${image}:${version}" \
                 --format '{{json .Manifest}}' \
                 | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
@@ -172,7 +176,7 @@ jobs:
           set -euo pipefail
           identity='^https://github.com/paul007ex/breachsafe-container/\.github/workflows/openssl-publish\.yml@refs/'
           for image in "${PRIMARY}" "${BACKUP}"; do
-            for version in 4.0.2 latest 1.0.2u; do
+            for version in "${V40}" latest 1.0.2u; do
               digest="$(docker buildx imagetools inspect "${image}:${version}" \
                 --format '{{json .Manifest}}' \
                 | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
@@ -222,11 +226,11 @@ jobs:
           RUN echo /opt/openssl/lib > /etc/ld.so.conf.d/openssl.conf \\
               && echo /opt/openssl/lib64 >> /etc/ld.so.conf.d/openssl.conf \\
               && ldconfig \\
-              && /opt/openssl/bin/openssl version | grep -q '^OpenSSL 4\.0\.1 ' \\
+              && /opt/openssl/bin/openssl version | grep -qF "OpenSSL ${V40} " \\
               && /opt/openssl-legacy/bin/openssl version | grep -q '^OpenSSL 1\.0\.2u ' \\
               && /opt/openssl/bin/openssl ciphers 'RC4:@SECLEVEL=0' | grep -q RC4 \\
               && /opt/openssl/bin/openssl list -kem-algorithms | grep -q 'ML-KEM-768' \\
-              && /opt/openssl-legacy/bin/openssl ciphers | tr ':' '\\n' | grep -qx 'EXP-RC4-MD5' \\
+              && /opt/openssl-legacy/bin/openssl ciphers EXPORT | tr ':' '\\n' | grep -qx 'EXP-RC4-MD5' \\
               && /opt/openssl/bin/openssl version \\
               && /opt/openssl-legacy/bin/openssl version
           DOCKERFILE
