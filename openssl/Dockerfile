@@ -102,7 +102,7 @@ FROM ossl40-src AS ossl40-stock
 
 RUN set -eux; \
     ./Configure --prefix=/opt/openssl-stock --openssldir=/opt/openssl-stock/ssl \
-      shared no-tests "-Wl,-rpath,/opt/openssl-stock/lib"; \
+      shared no-tests "-Wl,-rpath,/opt/openssl-stock/lib64:/opt/openssl-stock/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw
@@ -132,7 +132,7 @@ RUN set -eux; \
     ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl \
       shared no-tests \
       enable-weak-ssl-ciphers enable-idea enable-seed \
-      "-Wl,-rpath,/opt/openssl/lib"; \
+      "-Wl,-rpath,/opt/openssl/lib64:/opt/openssl/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw
@@ -266,6 +266,11 @@ WORKDIR /src
 #
 # Export suites and single DES have no flag in any 3.x build; they are gone from
 # the sources. :1.0.2u remains the only variant that reaches those two.
+#
+# The RUNPATH names both libdirs because the install target differs by
+# architecture: x86_64 lands in lib64, aarch64 in lib. Naming one silently loses
+# to the base image's own libssl on the other arch, which is how the first attempt
+# passed arm64 and failed amd64 (#50).
 # ---------------------------------------------------------------------------
 FROM ossl35-src AS ossl35-weak
 
@@ -273,7 +278,7 @@ RUN set -eux; \
     ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl \
       shared no-tests \
       enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method enable-idea enable-seed \
-      "-Wl,-rpath,/opt/openssl/lib"; \
+      "-Wl,-rpath,/opt/openssl/lib64:/opt/openssl/lib"; \
     make -j"$(nproc)" build_libs; \
     make -j"$(nproc)" apps/openssl; \
     make install_sw
