@@ -31,6 +31,9 @@ env:
   # ARG OPENSSL_VERSION and the tarball digest; the contract job below reads this
   # value rather than repeating the number, so the two cannot drift silently.
   V40: "4.0.2"
+  # The 3.5 LTS weak build is the default: it is the only supported series that
+  # can still carry SSLv3, which 4.0 rejects at Configure.
+  V35: "3.5.8"
 
 permissions:
   contents: read
@@ -42,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
-        target: [openssl40, openssl102u]
+        target: [openssl35weak, openssl40, openssl102u]
         include:
           - arch: amd64
             runner: ubuntu-latest
@@ -104,6 +107,12 @@ jobs:
       # collide: each contains a file named `amd64`.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          path: digests/openssl35weak
+          pattern: digest-openssl35weak-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
           path: digests/openssl40
           pattern: digest-openssl40-*
           merge-multiple: true
@@ -130,7 +139,7 @@ jobs:
           # Count first. `imagetools create` with an empty ref list is not an error,
           # it retags nothing and reports success, so a failed artifact download
           # would silently republish a stale tag.
-          for target in openssl40 openssl102u; do
+          for target in openssl35weak openssl40 openssl102u; do
             n="$(find "digests/${target}" -type f | wc -l)"
             [ "$n" -eq 2 ] || { echo "::error::${target}: ${n} digest(s), expected 2"; exit 1; }
           done
@@ -142,13 +151,14 @@ jobs:
             docker buildx imagetools create --tag "${PRIMARY}:${version}" "${refs[@]}"
             docker buildx imagetools create --tag "${BACKUP}:${version}" "${refs[@]}"
           }
+          publish openssl35weak "${V35}"
           publish openssl40 "${V40}"
           publish openssl102u 1.0.2u
 
-          # `latest` is the 4.0 weak build, so an ordinary unsuffixed pull gets
-          # the weak ciphers with no special tag and no special pin.
+          # `latest` is the 3.5 LTS weak build, so an ordinary unsuffixed pull gets
+          # the weak ciphers and SSLv3 with no special tag and no special pin.
           refs=()
-          for f in digests/openssl40/*; do refs+=("${PRIMARY}@$(cat "$f")"); done
+          for f in digests/openssl35weak/*; do refs+=("${PRIMARY}@$(cat "$f")"); done
           docker buildx imagetools create --tag "${PRIMARY}:latest" "${refs[@]}"
           docker buildx imagetools create --tag "${BACKUP}:latest" "${refs[@]}"
 
@@ -159,7 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           for image in "${PRIMARY}" "${BACKUP}"; do
-            for version in "${V40}" latest 1.0.2u; do
+            for version in "${V35}" "${V40}" latest 1.0.2u; do
               digest="$(docker buildx imagetools inspect "${image}:${version}" \
                 --format '{{json .Manifest}}' \
                 | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
@@ -176,7 +186,7 @@ jobs:
           set -euo pipefail
           identity='^https://github.com/paul007ex/breachsafe-container/\.github/workflows/openssl-publish\.yml@refs/'
           for image in "${PRIMARY}" "${BACKUP}"; do
-            for version in "${V40}" latest 1.0.2u; do
+            for version in "${V35}" "${V40}" latest 1.0.2u; do
               digest="$(docker buildx imagetools inspect "${image}:${version}" \
                 --format '{{json .Manifest}}' \
                 | python3 -c 'import json,sys;print(json.load(sys.stdin)["digest"])')"
@@ -218,18 +228,19 @@ jobs:
         run: |
           set -euo pipefail
           cat > Dockerfile.assert <<DOCKERFILE
-          FROM ${PRIMARY}:latest AS o40
+          FROM ${PRIMARY}:latest AS o35
           FROM ${PRIMARY}:1.0.2u AS o102
           FROM debian:bookworm-slim
-          COPY --from=o40 /opt/openssl /opt/openssl
+          COPY --from=o35 /opt/openssl /opt/openssl
           COPY --from=o102 /opt/openssl-legacy /opt/openssl-legacy
           RUN echo /opt/openssl/lib > /etc/ld.so.conf.d/openssl.conf \\
               && echo /opt/openssl/lib64 >> /etc/ld.so.conf.d/openssl.conf \\
               && ldconfig \\
-              && /opt/openssl/bin/openssl version | grep -qF "OpenSSL ${V40} " \\
+              && /opt/openssl/bin/openssl version | grep -qF "OpenSSL ${V35} " \\
               && /opt/openssl-legacy/bin/openssl version | grep -q '^OpenSSL 1\.0\.2u ' \\
               && /opt/openssl/bin/openssl ciphers 'RC4:@SECLEVEL=0' | grep -q RC4 \\
               && /opt/openssl/bin/openssl list -kem-algorithms | grep -q 'ML-KEM-768' \\
+              && /opt/openssl/bin/openssl s_client -help 2>&1 | grep -q -- '-ssl3' \\
               && /opt/openssl-legacy/bin/openssl ciphers EXPORT | tr ':' '\\n' | grep -qx 'EXP-RC4-MD5' \\
               && /opt/openssl/bin/openssl version \\
               && /opt/openssl-legacy/bin/openssl version
