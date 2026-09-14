@@ -34,13 +34,13 @@
 # Producing a new OpenSSL version is a separate deliberate act; see
 # openssl/Dockerfile.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/paul007ex/breachsafe-openssl:3.5.8@sha256:36dbb1ef300eab5ff775dd51b73efe7351273ddd90c533bf3f8013d0c47e8fa9 AS openssl-build
+FROM ghcr.io/paul007ex/breachsafe-openssl:3.5.8@sha256:a2671024598c5e31179722826c78ac7a5effafb53dda97825da652df9241b46f AS openssl-build
 
 # ---------------------------------------------------------------------------
 # OpenSSL 1.0.2u. EOL by design: the compatibility lane measures what a weak
 # client can still negotiate. Never link a product against it.
 # ---------------------------------------------------------------------------
-FROM ghcr.io/paul007ex/breachsafe-openssl:1.0.2u@sha256:f1ea087b0e6b44f7134773b0d567d7b2fb01a88451cc360e0915e229e6d8c8c7 AS openssl-legacy-build
+FROM ghcr.io/paul007ex/breachsafe-openssl:4.0.2@sha256:bac311be72adf9465798f482062d3626f062b5eba8aa0d0c5d953ebf95df9337 AS openssl-legacy-build
 
 # ---------------------------------------------------------------------------
 # Stage (b): fetch + SHA256-verify pinned release binaries for the build arch.
