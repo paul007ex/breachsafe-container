@@ -164,7 +164,7 @@ RUN set -eux; \
 # rust:slim already ships cargo, clippy, rustfmt and cc. Only pkg-config is
 # missing, and openssl-sys needs it to locate libcrypto via PKG_CONFIG_PATH.
 # ---------------------------------------------------------------------------
-FROM rust:1.98.0-slim-bookworm@sha256:1469a27c125cb5a3aebfa4f4e4665d935b02fb72cc093b2c974b3d740e43f157 AS rust
+FROM rust:1.98.1-slim-bookworm@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730 AS rust
 
 ARG OPENSSL_VERSION=3.5.8
 ARG RUST_VERSION=1.98.0
